@@ -4,6 +4,7 @@ ditto
 # Data
 data
 clean_data
+raw_data
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,16 +1,19 @@
+"""
+This script extracts C / C++ codes from raw jsons.
+"""
 import os
 import json
 
 def clear_output_files():
     """
-    Clears the content of all output files (clean_data)
+    Clears the content of all output files (/data)
     """
 
     files = [
-        'clean_data/paired_c.txt',
-        'clean_data/paired_cpp.txt',
-        'clean_data/unpaired_c.txt',
-        'clean_data/unpaired_cpp.txt'
+        'data/paired_c.txt',
+        'data/paired_cpp.txt',
+        'data/unpaired_c.txt',
+        'data/unpaired_cpp.txt'
     ]
 
     for file_path in files:
