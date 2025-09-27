@@ -75,7 +75,7 @@ def clean_file(infile: str, outfile: str, is_cpp: bool, is_paired: bool):
             else:
                 skipped += 1
 
-            if i % 1000 == 0:
+            if i % 100 == 0:
                 print(f"Processed {i} snippets with kept: {kept}, skipped: {skipped}")
 
     print(f"Cleaning {infile} completed. Kept {kept} snippets, skipped {skipped}.\n")

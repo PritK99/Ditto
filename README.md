@@ -22,6 +22,14 @@ Paired C and C++ data: `2492`
 Unpaired C data = `76020`
 Unpaired C++ data = `81262`
 
+However, we observe that the dataset contains several duplicates. We found the same code snippet repeat 9 times in the datset. After removing all the duplicates, we get the following:
+
+Unique entries with both C and C++: `374`
+Unique entries with only C: `882`
+Unique entries with only C++: `773`
+
+The steep reduction in dataset showed us the level of duplication in the raw data, and hence we decided to explore other datasets as well.
+
 ## Step 3: Cleaned Data
 
 The data that we obtained from step 2 contains several C / C++ code snippets (paired and unpaired). However, not all of the codes can be executed. Some of the code snippets just represent some function defination, while others use some outdated libraries such as `graphics.h`. To avoid using such data, we need to perform cleaning. 
