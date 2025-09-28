@@ -28,8 +28,8 @@ def tokenize_with_mapping(snippet, index, is_cpp):
     os.remove(tmp_path)
 
     var_map = {}
-    val_count = 1
-    var_count = 1
+    val_count = 0
+    var_count = 0
 
     def visit(node, scope_vars):
         nonlocal var_count, val_count
@@ -180,3 +180,5 @@ paired_c_csv.to_csv("final_data/paired_c.csv", index=False)
 paired_cpp_csv.to_csv("final_data/paired_cpp.csv", index=False)
 
 print("All DataFrames saved as CSV in final_data/")
+
+print(unpaired_c_csv.loc[0])
