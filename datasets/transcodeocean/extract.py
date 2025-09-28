@@ -1,5 +1,5 @@
 """
-This script extracts C / C++ codes from raw jsons.
+This script extracts C / C++ codes from raw jsons of transcodeocean dataset.
 """
 import os
 import json

@@ -1,20 +1,33 @@
 # Ditto
 
-## Dataset
+## Datasets
 
-### Step 1: Raw Data
+For Ditto, we require unpaired C, unpaired C++, and paired C and C++ code files. In order to obtain this, we use several existing datasets. 
+
+## Setting up
+
+Create a folder called `final_data` along with empty files `paired_c.txt`, `paired_cpp.txt`, `unpaired_c.txt`, `unpaired_cpp.txt` in it. All the indiidual datasets will append their data in these files. Now follow the steps below.
+
+We also need to create a virtual enviroment. Steps to create the same are given here:
+
+`python3 -m venv ditto`
+
+`source ditto/bin/activate`
+
+` pip install -r requirements.txt `
+
+
+### Step 1: Individual data directories
+
+#### Transcodeocean
 
 We use CodeTransOcean: https://github.com/WeixiangYAN/CodeTransOcean/tree/main (Can be downloaded as Zip file using Google Drive link). (MultiLingualTrans, NicheTrans, LLMTrans).
 
-For each one of these folders, keep the json files in `/raw_data`.
+For each one of these folders, keep the json files in `transcodeocean/raw_data`.
 
-Alternatively, click <a href=""></a> to directly download the `raw_data` zipfile.
-
-### Step 2: Data
+For each one of these folders, keep the json files in `transcodeocean/raw_data`.
 
 The raw json file contains codes from several languages. We need to extract paired and unpaired C and C++ languages from the data. For this we use `extract.py`. Please ensure that you have the folder `/data` along with empty files `paired_c.txt`, `paired_cpp.txt`, `unpaired_c.txt`, `unpaired_cpp.txt`. Running the `extract.py` script will populate these empty files.
-
-Alternatively, click <a href=""></a> to directly download the `data` zipfile.
 
 After this step, we obtain the following,
 
@@ -28,33 +41,23 @@ Unique entries with both C and C++: `374`
 Unique entries with only C: `882`
 Unique entries with only C++: `773`
 
-The steep reduction in dataset showed us the level of duplication in the raw data, and hence we decided to explore other datasets as well.
+The steep reduction in dataset showed us the level of duplication in the raw data, and hence we decided to explore other datasets as well. 
 
-## Step 3: Cleaned Data
+#### Kaggle
 
-The data that we obtained from step 2 contains several C / C++ code snippets (paired and unpaired). However, not all of the codes can be executed. Some of the code snippets just represent some function defination, while others use some outdated libraries such as `graphics.h`. To avoid using such data, we need to perform cleaning. 
+Because the data obtained from transcodeocean is very less, we use other resources. Here, we use https://www.kaggle.com/datasets/dianavostrova/formai-v2-dataset-without-clones-7z dataset to obtain C code. 
 
-Cleaning step is a very expensive step as it involves going through each snippet of code and then compiling it to check if this code can be used as data or not. This process can take around 7 - 8 hours as we have approximately `150000` code snippets to evaluate.
+Extract all the files inside `kaggle/raw_data` directory. There are a total of approximately 3 L code files here. Since our requirement in not that much, we will randomly sample the fles from this folder.
 
-For cleaning the data, run `preprocess.py`. Please ensure that you have the folder `/clean_data` along with empty files `paired_c.txt`, `paired_cpp.txt`, `unpaired_c.txt`, `unpaired_cpp.txt`. Running the `preprocess.py` script will populate these empty files.
+Here, we require `/data` directory with single `unpaired_c.txt` file.
 
-In addition to this, we also require clang. Please follow the installation steps for installing clang.
+Now, running extract.py will randomly sample N codefiles from the data and add them to data directory after processing. This dataset has no duplicates.
 
-Alternatively, click <a href=""></a> to directly download the `clean_data` zipfile.
+### Step 2: Preprocessing and Data Collection
 
-After this step, we obtain the following,
+This step requires installing clang and libclang
 
-Paired C and C++ data: ``
-Unpaired C data = ``
-Unpaired C++ data = ``
-
-Here, our dataset shrinks a lot.
-
-## Step 4: Tokenization 
-
-The code snippet can be converted into a series of tokens using lexer and into an AST using parser. Hence, we use `libclang` to convert our code into tokens and AST. Once we have our `/clean_data` folder, we can run `tokenization.py`.
-
-## Installation
+#### Installation for clang and libclang
 
 Make sure that all the requirements in `requirements.txt` are installed
 
@@ -69,3 +72,18 @@ You will also need to change the path in `set_library_file()` in `tokenization.p
 ``find /usr/lib -name "libclang.so*" 2>/dev/null`
 
 For example, `/usr/lib/llvm-18/lib/libclang.so`
+
+#### Data Collection
+
+Now, we have data folders in each dataset directory in the same format. This step involves combining all the individual files from `/data` directory of each dataset to `final_data`. However, we need an additional check which tests the files and appends them to final_data only if they are executable. For this we need to run `process_and_combine.py` script. PLease note that this step is a time consuming step as it involves executing each and every file.
+
+
+
+
+
+
+//////////////////////////////////////////////  WIP  ////////////////////////////////////////
+
+## Step 3: Tokenization 
+
+The code snippet can be converted into a series of tokens using lexer and into an AST using parser. Hence, we use `libclang` to convert our code into tokens and AST. Once we have our `/clean_data` folder, we can run `tokenization.py`.

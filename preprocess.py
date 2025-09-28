@@ -1,130 +1,182 @@
-"""
-This script performs data preprocessing by checking if the codes in the data are compilable or not.
-We only keep those snippets that compile successfully with clang/clang++ and store them in /clean_data.
-"""
 import os
-import warnings
-import subprocess
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+import json
+import pandas as pd
+from clang import cindex
 
-def clear_output_files(files: list):
-    """
-    Clears the content of all files (/clean_data)
+cindex.Config.set_library_file("/usr/lib/llvm-18/lib/libclang.so")
 
-    Args:
-        files (list): list of all the files which need to be cleared
+def tokenize_with_mapping(snippet, index, is_cpp):
     """
-    for file_path in files:
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        open(file_path, 'w', encoding='utf-8').close()
+    Tokenizes a snippet using libclang, returns:
+    - tokens: list of tokens
+    - mapping: dict of variable/literal mappings
+    - ast_dict: recursive AST as nested dict
+    Resets var/val counters per snippet.
+    """
+    # Preprocess snippet: remove unwanted escape chars for tokenization
+    snippet_clean = snippet.replace("\\n", " ").replace("\\t", " ").replace("\\r", " ")
 
-def compiles(code: str, is_cpp: bool) -> bool:
-    """
-    Return True if code compiles
+    tmp_path = "tmp.c" if not is_cpp else "tmp.cpp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(snippet_clean)
 
-    Args:
-        code (str): code in text format
-        is_cpp (bool): True for C++ code compilation, False for C code compilation
-    """
-    compiler = "clang++" if is_cpp else "clang"
     try:
-        proc = subprocess.run(
-            [compiler, "-x", "c++" if is_cpp else "c",
-             "-std=c++17" if is_cpp else "-std=c11", "-fsyntax-only", "-"],
-            input=code.encode("utf-8"),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=5
-        )
-        return proc.returncode == 0
+        tu = index.parse(tmp_path, args=["-std=c++17"] if is_cpp else ["-std=c11"])
     except Exception:
-        return False
+        os.remove(tmp_path)
+        return [], {}, {}
+    os.remove(tmp_path)
 
-def clean_file(infile: str, outfile: str, is_cpp: bool, is_paired: bool):
+    var_map = {}
+    val_count = 1
+    var_count = 1
+
+    def visit(node, scope_vars):
+        nonlocal var_count, val_count
+        tokens = []
+        ast_node = {"kind": node.kind.name, "spelling": node.spelling, "children": []}
+
+        if node.kind in [cindex.CursorKind.VAR_DECL, cindex.CursorKind.PARM_DECL]:
+            name = node.spelling
+            if name not in scope_vars:
+                scope_vars[name] = f"var{var_count}"
+                var_count += 1
+
+        for c in node.get_children():
+            child_tokens, child_ast = visit(c, dict(scope_vars))
+            tokens.extend(child_tokens)
+            ast_node["children"].append(child_ast)
+
+        # Generate tokens
+        for t in node.get_tokens():
+            tok = t.spelling.replace("\\n", " ").replace("\\t", " ").replace("\\r", " ")
+            if t.kind == cindex.TokenKind.IDENTIFIER:
+                mapped = scope_vars.get(tok, tok)
+                tokens.append(mapped)
+            elif t.kind == cindex.TokenKind.LITERAL:
+                val_name = f"val{val_count}"
+                tokens.append(val_name)
+                var_map[tok] = val_name
+                val_count += 1
+            else:
+                tokens.append(tok)
+        return tokens, ast_node
+
+    tokens, ast_dict = visit(tu.cursor, {})
+    return tokens, var_map, ast_dict
+
+
+def check_compilable(snippet, index, is_cpp):
+    tmp_path = "tmp.c" if not is_cpp else "tmp.cpp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(snippet)
+    try:
+        tu = index.parse(tmp_path, args=["-std=c++17"] if is_cpp else ["-std=c11"])
+        compilable = len(list(tu.diagnostics)) == 0
+    except Exception:
+        compilable = False
+    finally:
+        os.remove(tmp_path)
+    return compilable
+
+
+def process(file_path):
     """
-    Processes the input file and writes only compilable snippets to the output file.
-
-    Args:
-        infile (str): path to infile
-        outfile (str): path to outfile
-        is_cpp (bool): True for C++ code compilation, False for C code compilation
-        is_paired (bool): True if working with paired data, False otherwise
-    
-    Returns:
-        compiled_indexes (list): list of index of all compilable code snippets
+    Processes a file line by line, returns dict with:
+    original_code, is_compilable, tokens, mapping, ast
+    Stores original_code as a single line (escape chars removed)
     """
-    kept, skipped = 0, 0
-    compiled_indexes = []
+    index = cindex.Index.create()
+    is_cpp = file_path.lower().endswith(".cpp")
+    rows = []
 
-    with open(infile, "r", encoding="utf-8") as fin, open(outfile, "w", encoding="utf-8") as fout:
-        print(f"Cleaning {infile} started.")
-
-        for i, raw_line in enumerate(fin, 1):
-            snippet = raw_line.rstrip("\n")
-            if not snippet.strip():
+    with open(file_path, "r", encoding="utf-8") as f_obj:
+        for line in f_obj:
+            snippet = line.strip()  # remove leading/trailing whitespace
+            if not snippet:
                 continue
 
-            # Restore literal \n to real newlines
-            code = snippet.encode("utf-8").decode("unicode_escape", errors='replace')
+            # Treat snippet literally; remove escape chars for storage
+            snippet_one_line = snippet.replace("\\n", " ").replace("\\t", " ")
 
-            if compiles(code, is_cpp=is_cpp):
-                fout.write(raw_line + "\n")
-                kept += 1
-                if (is_paired == False):    # Only append for unpaired data, as for paired data we need to take intersection of C and C++ code
-                    compiled_indexes.append(i)
-            else:
-                skipped += 1
+            compilable = check_compilable(snippet, index, is_cpp)
+            tokens, mapping, ast_dict = tokenize_with_mapping(snippet, index, is_cpp)
 
-            if i % 100 == 0:
-                print(f"Processed {i} snippets with kept: {kept}, skipped: {skipped}")
-
-    print(f"Cleaning {infile} completed. Kept {kept} snippets, skipped {skipped}.\n")
-    return compiled_indexes
-
-def write_selected_lines(infile: str, outfile: str, selected_indexes: list):
-    """
-    Writing the compilable code snippets for paired data
-
-    Args:
-        infile (str): path to infile
-        outfile (str): path to outfile
-        selected_indexes (list): list of index of all compilable code snippets
-    """
-    selected_set = set(selected_indexes)
-    with open(infile, "r", encoding="utf-8") as fin, open(outfile, "w", encoding="utf-8") as fout:
-        for i, line in enumerate(fin, 1):
-            if i in selected_set:
-                fout.write(line)
-
-"""
-This portion is for unpaired C / C++ data files only
-"""
-infile = "./data/unpaired_cpp.txt"
-outfile = "./clean_data/unpaired_cpp.txt"
-clear_output_files([outfile])
-cpp_compiled_indexes = clean_file(infile, outfile, is_cpp=True, is_paired=False)
+            rows.append({
+                "original_code": snippet_one_line,
+                "is_compilable": compilable,
+                "tokens": tokens,
+                "mapping": mapping,
+                "ast": ast_dict
+            })
+    return rows
 
 
-infile = "./data/unpaired_c.txt"
-outfile = "./clean_data/unpaired_c.txt"
-clear_output_files([outfile])
-c_compiled_indexes = clean_file(infile, outfile, is_cpp=False, is_paired=False)
+def serialize_for_csv(df, cols_to_serialize):
+    df_copy = df.copy()
+    for col in cols_to_serialize:
+        df_copy[col] = df_copy[col].apply(lambda x: json.dumps(x))
+    return df_copy
 
-"""
-This portion is for paired C / C++ data files only
-"""
-infile_cpp = "./data/paired_cpp.txt"
-outfile_cpp = "./clean_data/paired_cpp.txt"
-infile_c = "./data/paired_c.txt"
-outfile_c = "./clean_data/paired_c.txt"
-clear_output_files([outfile_cpp, outfile_c])
 
-cpp_compiled_indexes = clean_file(infile_cpp, outfile_cpp, is_cpp=True, is_paired=True)
-c_compiled_indexes = clean_file(infile_c, outfile_c, is_cpp=False, is_paired=True)
+# Directory to store final data
+directory = "final_data"
+os.makedirs(directory, exist_ok=True)
 
-common_indexes = sorted(set(cpp_compiled_indexes) & set(c_compiled_indexes))
-print(f"Total snippets that compiled in both C++ and C: {len(common_indexes)}")
+# Columns and DataFrames
+cols = ["original_code", "is_compilable", "tokens", "mapping", "ast"]
+unpaired_c_df = pd.DataFrame(columns=cols)
+unpaired_cpp_df = pd.DataFrame(columns=cols)
+paired_c_df = pd.DataFrame(columns=cols)
+paired_cpp_df = pd.DataFrame(columns=cols)
 
-# Write only the intersection snippets for paired case
-write_selected_lines(infile_cpp, outfile_cpp, common_indexes)
-write_selected_lines(infile_c, outfile_c, common_indexes)
+datasets = ["transcodeocean"]
+
+# Process datasets
+for dataset in datasets:
+    path = f"./datasets/{dataset}/data/"
+    if not os.path.exists(path):
+        print(f"path {path} does not exist")
+        continue
+
+    for file_name in os.listdir(path):
+        file_path = os.path.join(path, file_name)
+        if not os.path.isfile(file_path):
+            continue
+
+        print(f"Processing file {file_path}...")
+        df_result = pd.DataFrame(process(file_path))
+
+        # Append to correct DataFrame
+        if "_c." in file_name.lower() and "unpaired" in file_name.lower():
+            unpaired_c_df = pd.concat([unpaired_c_df, df_result], ignore_index=True)
+        elif "_cpp." in file_name.lower() and "unpaired" in file_name.lower():
+            unpaired_cpp_df = pd.concat([unpaired_cpp_df, df_result], ignore_index=True)
+        elif "_c." in file_name.lower() and "paired" in file_name.lower():
+            paired_c_df = pd.concat([paired_c_df, df_result], ignore_index=True)
+        elif "_cpp." in file_name.lower() and "paired" in file_name.lower():
+            paired_cpp_df = pd.concat([paired_cpp_df, df_result], ignore_index=True)
+
+# Print shapes
+print("Shapes of DataFrames:")
+print("unpaired_c_df:", unpaired_c_df.shape)
+print("unpaired_cpp_df:", unpaired_cpp_df.shape)
+print("paired_c_df:", paired_c_df.shape)
+print("paired_cpp_df:", paired_cpp_df.shape)
+
+# Columns to serialize
+cols_to_serialize = ["tokens", "mapping", "ast"]
+
+# Serialize DataFrames
+unpaired_c_csv = serialize_for_csv(unpaired_c_df, cols_to_serialize)
+unpaired_cpp_csv = serialize_for_csv(unpaired_cpp_df, cols_to_serialize)
+paired_c_csv = serialize_for_csv(paired_c_df, cols_to_serialize)
+paired_cpp_csv = serialize_for_csv(paired_cpp_df, cols_to_serialize)
+
+# Save to CSV
+unpaired_c_csv.to_csv("final_data/unpaired_c.csv", index=False)
+unpaired_cpp_csv.to_csv("final_data/unpaired_cpp.csv", index=False)
+paired_c_csv.to_csv("final_data/paired_c.csv", index=False)
+paired_cpp_csv.to_csv("final_data/paired_cpp.csv", index=False)
+
+print("All DataFrames saved as CSV in final_data/")
