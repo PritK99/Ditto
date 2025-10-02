@@ -93,6 +93,6 @@ The code snippet can be converted into a series of tokens using lexer and into a
 
 ## Step 4: Training
 
-The training loop can be run by running `model.py`. This requires `unpaired_c.txt` and `unpaired_cpp.txt` files. 
+The training loop can be run by running `model.ipynb`. This requires `unpaired_c.txt` and `unpaired_cpp.txt` files. 
 
 Link to checkpoints: https://iiithydresearch-my.sharepoint.com/:u:/g/personal/prit_kanadiya_research_iiit_ac_in/EdajC3Pzs09JsBsXNoh3-s0B6xgjuFSZRO_yuZR5PyTVyg?e=ScDc34 
