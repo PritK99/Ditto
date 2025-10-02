@@ -1,5 +1,15 @@
 # Ditto
 
+<p align="center">
+  <img src="https://media.tenor.com/4wt81D8xUEwAAAAM/ditto-pokemon.gif" alt="ditto">
+  <br>
+  <small><i>Image source: https://tenor.com/search/ditto-pokemon-gifs</i></small>
+</p>
+
+## Introduction
+
+Ditto is a transpiler that converts code between C++ and C languages. The name comes from the Pokémon Ditto, which can copy any other Pokémon exactly. Our goal is to build an AI transpiler that can translate code across different programming paradigms, no matter the language. For our project, we focus on C++ to C conversion and vice versa.
+
 ## Datasets
 
 For Ditto, we require unpaired C, unpaired C++, and paired C and C++ code files. In order to obtain this, we use several existing datasets. 
@@ -160,13 +170,14 @@ For example, `/usr/lib/llvm-18/lib/libclang.so`
 
 Now, we have data folders in each dataset directory in the same format. This step involves combining all the individual files from `/data` directory of each dataset to `final_data`. However, we need an additional check which tests the files and appends them to final_data only if they are executable. For this we need to run `process_and_combine.py` script. PLease note that this step is a time consuming step as it involves executing each and every file.
 
-
-
-
-
-
-//////////////////////////////////////////////  WIP  ////////////////////////////////////////
-
 ## Step 3: Tokenization 
 
 The code snippet can be converted into a series of tokens using lexer and into an AST using parser. Hence, we use `libclang` to convert our code into tokens and AST. Once we have our `/clean_data` folder, we can run `tokenization.py`.
+
+## Step 4: Training
+
+Code for model architecture, dataloaders, metrics, trainer in `model.ipynb`.
+
+The training loop can be run by running `model.ipynb`. This requires `unpaired_c.txt` and `unpaired_cpp.txt` files. 
+
+Link to checkpoints: https://iiithydresearch-my.sharepoint.com/:u:/g/personal/prit_kanadiya_research_iiit_ac_in/EdajC3Pzs09JsBsXNoh3-s0B6xgjuFSZRO_yuZR5PyTVyg?e=ScDc34 
