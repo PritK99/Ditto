@@ -1,11 +1,10 @@
 # Ditto
 
-
-<center>
-
-<img src="https://media.tenor.com/4wt81D8xUEwAAAAM/ditto-pokemon.gif" alt="ditto">
-
-</center>
+<p align="center">
+  <img src="https://media.tenor.com/4wt81D8xUEwAAAAM/ditto-pokemon.gif" alt="ditto">
+  <br>
+  <small><i>Image source: https://tenor.com/search/ditto-pokemon-gifs</i></small>
+</p>
 
 ## Introduction
 
