@@ -29,6 +29,19 @@ def remove_comments(code: str) -> str:
     code = re.sub(r'/\*.*?\*/', '', code, flags=re.DOTALL)
     return code
 
+def identify_token_type(cursor):
+    """
+    Identify the type of token (function, class, variable) based on the cursor.
+    """
+    if cursor.kind == cindex.CursorKind.FUNCTION_DECL or cursor.kind == cindex.CursorKind.CXX_METHOD:
+        return 'function'
+    elif cursor.kind == cindex.CursorKind.CLASS_DECL:
+        return 'class'
+    elif cursor.kind == cindex.CursorKind.VAR_DECL or cursor.kind == cindex.CursorKind.PARM_DECL:
+        return 'variable'
+    else:
+        return 'unknown'
+    
 def extract_tokens_from_code(code: str, is_cpp: bool):
     """
     Extract tokens from the given code string using clang.
@@ -47,11 +60,22 @@ def extract_tokens_from_code(code: str, is_cpp: bool):
     # Extract token details
     token_list = []
     for token in tokens:
+
         token_info = {
             'spelling': token.spelling,
             'kind': token.kind,
-            'location': (token.location.line, token.location.column)
+            'location': (token.location.line, token.location.column),
+            'type': 'unknown'
         }
+
+        if (token.kind == cindex.TokenKind.IDENTIFIER):
+            cursor = token.cursor
+            if cursor:
+                token_info['type'] = identify_token_type(cursor)
+
+                if (token_info['type'] == 'unknown'):
+                    token_info['type'] = token.spelling
+        
         token_list.append(token_info)
 
     # Clean up the temporary code file
@@ -73,20 +97,31 @@ def process_code_file(code_block: str, output_file, is_cpp: bool):
     tokens = extract_tokens_from_code(clean_code, is_cpp)
  
     # Step 4: Code obfuscation
-    count = 0
+    var_count = 0
+    class_count = 0
+    func_count = 0
     obfuscated_dict = {}
     for token in tokens:
-            if (token["kind"] == cindex.TokenKind.IDENTIFIER):
+            if (token["kind"] == cindex.TokenKind.IDENTIFIER and token["type"] != token["spelling"]):
                 if (token["spelling"] in obfuscated_dict.keys()):
                     token["spelling"] = obfuscated_dict[token["spelling"]]
                 else:
-                    obfuscated_dict[token["spelling"]] = f"var{count}"
-                    token["spelling"] = obfuscated_dict[token["spelling"]]
-                    count += 1
+                    if (token["type"] == "variable"):
+                        obfuscated_dict[token["spelling"]] = f"var{var_count}"
+                        token["spelling"] = obfuscated_dict[token["spelling"]]
+                        var_count += 1
+                    elif (token["type"] == "function"):
+                        obfuscated_dict[token["spelling"]] = f"func{func_count}"
+                        token["spelling"] = obfuscated_dict[token["spelling"]]
+                        func_count += 1
+                    elif (token["type"] == "class"):
+                        obfuscated_dict[token["spelling"]] = f"class{class_count}"
+                        token["spelling"] = obfuscated_dict[token["spelling"]]
+                        class_count += 1
     
     # Step 5: Write the tokens to the output file
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=['spelling', 'kind', 'location'])
+        writer = csv.DictWriter(f, fieldnames=['spelling', 'kind', 'location', 'type'])
         if f.tell() == 0:
             writer.writeheader()  # Write the header only once
         for token in tokens:

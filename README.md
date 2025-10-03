@@ -185,3 +185,21 @@ Link to checkpoints: https://iiithydresearch-my.sharepoint.com/:u:/g/personal/pr
 Link to unpaired_c.txt: https://iiithydstudents-my.sharepoint.com/:t:/g/personal/kanakalatha_vemuru_students_iiit_ac_in/EWKOZlJCNOpBvsEX6ETG5fUB0ipKx7ocr7sb_wQYmIFmdA?e=KXTbmr
 
 Link to unpaired_cpp.txt: https://iiithydstudents-my.sharepoint.com/:t:/g/personal/kanakalatha_vemuru_students_iiit_ac_in/Ec5mOFw_kfROoBL_6EKezn0BDQS-QDUI0i2gplq_WzV3LA?e=FgCrTZ
+
+## Additional Improvements
+
+1) The tokenizer should perform semantic aware code obfuscation. This will keep track of variable declarations and usage, and provide better mapping. For example,
+
+```cpp
+#include <iostream>
+
+int count = 5;    // Global
+
+int main()
+{
+  int count = 0;    // Local
+  cout << count;
+}
+```
+
+2) The results obtained from tokenizer lack semantic meaning to them. Thus, they treat strings like "%d %d" as string literals. These too should not be masked and kept as it is.
