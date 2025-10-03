@@ -100,7 +100,9 @@ def process_code_file(code_block: str, output_file, is_cpp: bool):
     var_count = 0
     class_count = 0
     func_count = 0
+    lit_count = 0
     obfuscated_dict = {}
+    literal_dict = {}
     for token in tokens:
             if (token["kind"] == cindex.TokenKind.IDENTIFIER and token["type"] != token["spelling"]):
                 if (token["spelling"] in obfuscated_dict.keys()):
@@ -118,6 +120,14 @@ def process_code_file(code_block: str, output_file, is_cpp: bool):
                         obfuscated_dict[token["spelling"]] = f"class{class_count}"
                         token["spelling"] = obfuscated_dict[token["spelling"]]
                         class_count += 1
+                
+            if (token["kind"] == cindex.TokenKind.LITERAL):
+                if (token["spelling"] in literal_dict.keys()):
+                    token["spelling"] = literal_dict[token["spelling"]]
+                else:
+                    literal_dict[token["spelling"]] = f"lit{lit_count}"
+                    token["spelling"] = literal_dict[token["spelling"]]
+                    lit_count += 1
     
     # Step 5: Write the tokens to the output file
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
@@ -127,7 +137,7 @@ def process_code_file(code_block: str, output_file, is_cpp: bool):
         for token in tokens:
             writer.writerow(token)
     
-    return obfuscated_dict
+    return obfuscated_dict, literal_dict
 
 def process_txt_file(input_txt_file, output_file, is_cpp: bool):
     """
@@ -137,13 +147,15 @@ def process_txt_file(input_txt_file, output_file, is_cpp: bool):
         code_files = f.readlines()
 
     obfuscated_dict_list = []
+    literal_dict_list = []
     for idx, code_block in enumerate(code_files):
-        if (idx % 1000 == 0):
+        if (idx % 1000 == 0 and idx != 0):
             print(f"Completed processing code {idx + 1} / {len(code_files)}")
-        obfuscated_dict = process_code_file(code_block.strip(), output_file, is_cpp)
+        obfuscated_dict, literal_dict = process_code_file(code_block.strip(), output_file, is_cpp)
         obfuscated_dict_list.append(obfuscated_dict)
+        literal_dict_list.append(literal_dict)
     
-    return obfuscated_dict_list
+    return obfuscated_dict_list, literal_dict_list
 
 
 def save_tokens_to_json(obfuscated_dict_list, output_file):
@@ -167,12 +179,19 @@ def main():
         is_cpp = True
 
     # Process the file
+    print("//////////////////////////////////////////////")
     print(f"Processing the input file: {input_txt_file}")
-    obfuscated_dict_list = process_txt_file(input_txt_file, output_file, is_cpp)
+    obfuscated_dict_list, literal_dict_list = process_txt_file(input_txt_file, output_file, is_cpp)
+    print(f"Tokens for saved at {output_file}")
 
-    print(f"Tokens for {input_txt_file} saved at {output_file}")
-    dict_path = os.path.join(dir_name, f"{base_name}_obfuscated_tokens.json")
-    save_tokens_to_json(obfuscated_dict_list, dict_path)
+    obs_dict_path = os.path.join(dir_name, f"{base_name}_obfuscated_tokens.json")
+    lit_dict_path = os.path.join(dir_name, f"{base_name}_lit_tokens.json")
+
+    save_tokens_to_json(obfuscated_dict_list, obs_dict_path)
+    print(f"Obfuscated token mapping saved at {obs_dict_path}")
+
+    save_tokens_to_json(literal_dict_list, lit_dict_path)
+    print(f"Literal token mapping saved at {lit_dict_path}")
 
 if __name__ == "__main__":
     main()
