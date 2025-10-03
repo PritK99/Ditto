@@ -1,7 +1,8 @@
 import os
 import re
-from clang import cindex
+import json
 import csv
+from clang import cindex
 
 # Path for clang library
 cindex.Config.set_library_file("/usr/lib/llvm-18/lib/libclang.so")
@@ -70,14 +71,28 @@ def process_code_file(code_block: str, output_file, is_cpp: bool):
     
     # Step 3: Extract tokens from the cleaned code block
     tokens = extract_tokens_from_code(clean_code, is_cpp)
+ 
+    # Step 4: Code obfuscation
+    count = 0
+    obfuscated_dict = {}
+    for token in tokens:
+            if (token["kind"] == cindex.TokenKind.IDENTIFIER):
+                if (token["spelling"] in obfuscated_dict.keys()):
+                    token["spelling"] = obfuscated_dict[token["spelling"]]
+                else:
+                    obfuscated_dict[token["spelling"]] = f"var{count}"
+                    token["spelling"] = obfuscated_dict[token["spelling"]]
+                    count += 1
     
-    # Step 4: Write the tokens to the output file
+    # Step 5: Write the tokens to the output file
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=['spelling', 'kind', 'location', 'extent'])
+        writer = csv.DictWriter(f, fieldnames=['spelling', 'kind', 'location'])
         if f.tell() == 0:
             writer.writeheader()  # Write the header only once
         for token in tokens:
             writer.writerow(token)
+    
+    return obfuscated_dict
 
 def process_txt_file(input_txt_file, output_file, is_cpp: bool):
     """
@@ -86,10 +101,20 @@ def process_txt_file(input_txt_file, output_file, is_cpp: bool):
     with open(input_txt_file, 'r', encoding='utf-8') as f:
         code_files = f.readlines()
 
+    obfuscated_dict_list = []
     for idx, code_block in enumerate(code_files):
         if (idx % 1000 == 0):
             print(f"Completed processing code {idx + 1} / {len(code_files)}")
-        process_code_file(code_block.strip(), output_file, is_cpp)
+        obfuscated_dict = process_code_file(code_block.strip(), output_file, is_cpp)
+        obfuscated_dict_list.append(obfuscated_dict)
+    
+    return obfuscated_dict_list
+
+
+def save_tokens_to_json(obfuscated_dict_list, output_file):
+    indexed_dict = {i: obfuscated_dict_list[i] for i in range(len(obfuscated_dict_list))}
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(indexed_dict, f, indent=4)
 
 def main():
     # Directory where the output files will be stored
@@ -108,9 +133,11 @@ def main():
 
     # Process the file
     print(f"Processing the input file: {input_txt_file}")
-    process_txt_file(input_txt_file, output_file, is_cpp)
+    obfuscated_dict_list = process_txt_file(input_txt_file, output_file, is_cpp)
 
     print(f"Tokens for {input_txt_file} saved at {output_file}")
+    dict_path = os.path.join(dir_name, f"{base_name}_obfuscated_tokens.json")
+    save_tokens_to_json(obfuscated_dict_list, dict_path)
 
 if __name__ == "__main__":
     main()
