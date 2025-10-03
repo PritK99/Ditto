@@ -3,6 +3,7 @@ import re
 import json
 import csv
 from clang import cindex
+import pandas as pd
 
 # Path for clang library
 cindex.Config.set_library_file("/usr/lib/llvm-18/lib/libclang.so")
@@ -129,15 +130,10 @@ def process_code_file(code_block: str, output_file, is_cpp: bool):
                     token["spelling"] = literal_dict[token["spelling"]]
                     lit_count += 1
     
-    # Step 5: Write the tokens to the output file
-    with open(output_file, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=['spelling', 'kind', 'location', 'type'])
-        if f.tell() == 0:
-            writer.writeheader()  # Write the header only once
-        for token in tokens:
-            writer.writerow(token)
+    spellings = [token["spelling"] for token in tokens]
+    positions = [token["location"] for token in tokens]
     
-    return obfuscated_dict, literal_dict
+    return obfuscated_dict, literal_dict, spellings, positions, clean_code
 
 def process_txt_file(input_txt_file, output_file, is_cpp: bool):
     """
@@ -148,15 +144,27 @@ def process_txt_file(input_txt_file, output_file, is_cpp: bool):
 
     obfuscated_dict_list = []
     literal_dict_list = []
+    code_df = pd.DataFrame(columns=["original_code", "tokens", "positions", "obfuscated_mapping", "literal_mapping"])
     for idx, code_block in enumerate(code_files):
         if (idx % 1000 == 0 and idx != 0):
             print(f"Completed processing code {idx + 1} / {len(code_files)}")
-        obfuscated_dict, literal_dict = process_code_file(code_block.strip(), output_file, is_cpp)
+        obfuscated_dict, literal_dict, spellings, positions, clean_code = process_code_file(code_block.strip(), output_file, is_cpp)
         obfuscated_dict_list.append(obfuscated_dict)
         literal_dict_list.append(literal_dict)
-    
-    return obfuscated_dict_list, literal_dict_list
 
+        # Replace actual newlines with the literal string '\\n' and tabs with '\\t'
+        clean_code = clean_code.replace("\n", "\\n").replace("\t", "\\t")    
+
+        # Append row to DataFrame
+        code_df.loc[len(code_df)] = [
+            clean_code,
+            spellings,
+            positions,
+            json.dumps(obfuscated_dict),
+            json.dumps(literal_dict)
+        ]
+    
+    return code_df
 
 def save_tokens_to_json(obfuscated_dict_list, output_file):
     indexed_dict = {i: obfuscated_dict_list[i] for i in range(len(obfuscated_dict_list))}
@@ -169,10 +177,10 @@ def main():
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 
-    input_txt_file = "../final_data/test_cpp.txt" 
+    input_txt_file = "../final_data/unpaired_cpp.txt" 
 
     base_name = os.path.splitext(os.path.basename(input_txt_file))[0]
-    output_file = os.path.join(dir_name, f"{base_name}_tokens.csv")
+    output_file = os.path.join(dir_name, f"{base_name}_tokenized.csv")
 
     is_cpp = False
     if "cpp" in input_txt_file:
@@ -181,17 +189,9 @@ def main():
     # Process the file
     print("//////////////////////////////////////////////")
     print(f"Processing the input file: {input_txt_file}")
-    obfuscated_dict_list, literal_dict_list = process_txt_file(input_txt_file, output_file, is_cpp)
-    print(f"Tokens for saved at {output_file}")
-
-    obs_dict_path = os.path.join(dir_name, f"{base_name}_obfuscated_tokens.json")
-    lit_dict_path = os.path.join(dir_name, f"{base_name}_lit_tokens.json")
-
-    save_tokens_to_json(obfuscated_dict_list, obs_dict_path)
-    print(f"Obfuscated token mapping saved at {obs_dict_path}")
-
-    save_tokens_to_json(literal_dict_list, lit_dict_path)
-    print(f"Literal token mapping saved at {lit_dict_path}")
+    code_df = process_txt_file(input_txt_file, output_file, is_cpp)
+    code_df.to_csv(output_file, encoding = "utf-8", index=False)
+    print(f"Tokenized CSV file saved at {output_file}")
 
 if __name__ == "__main__":
     main()
