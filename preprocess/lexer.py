@@ -47,8 +47,11 @@ def extract_tokens_from_code(code: str, is_cpp: bool):
     """
     Extract tokens from the given code string using clang.
     """
-    # Create a temporary file with the code content
-    temp_code_file = 'temp_code.cpp'
+    if (is_cpp):
+        temp_code_file = 'temp_code.cpp'
+    else: 
+        temp_code_file = 'temp_code.c'
+
     with open(temp_code_file, 'w', encoding='utf-8') as temp_file:
         temp_file.write(code)
 
@@ -177,7 +180,8 @@ def main():
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
 
-    input_txt_file = "../final_data/unpaired_cpp.txt" 
+    # input_txt_file = "../final_data/unpaired_cpp.txt" 
+    input_txt_file = "../final_data/unpaired_c.txt" 
 
     base_name = os.path.splitext(os.path.basename(input_txt_file))[0]
     output_file = os.path.join(dir_name, f"{base_name}_tokenized.csv")
