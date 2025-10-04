@@ -182,9 +182,19 @@ The training loop can be run by running `model.ipynb`. This requires `unpaired_c
 
 Link to checkpoints: https://iiithydresearch-my.sharepoint.com/:u:/g/personal/prit_kanadiya_research_iiit_ac_in/EdajC3Pzs09JsBsXNoh3-s0B6xgjuFSZRO_yuZR5PyTVyg?e=ScDc34 
 
+### Raw Data
+
 Link to unpaired_c.txt: https://iiithydstudents-my.sharepoint.com/:t:/g/personal/kanakalatha_vemuru_students_iiit_ac_in/EWKOZlJCNOpBvsEX6ETG5fUB0ipKx7ocr7sb_wQYmIFmdA?e=KXTbmr
 
 Link to unpaired_cpp.txt: https://iiithydstudents-my.sharepoint.com/:t:/g/personal/kanakalatha_vemuru_students_iiit_ac_in/Ec5mOFw_kfROoBL_6EKezn0BDQS-QDUI0i2gplq_WzV3LA?e=FgCrTZ
+
+## Clean Data
+
+The below files contain the following columns: original_code, tokens, positions, obfuscated_mapping, literal_mapping
+
+Link to cleaned and tokenized C data: https://iiithydresearch-my.sharepoint.com/:x:/g/personal/prit_kanadiya_research_iiit_ac_in/EUEeP6v6WsZBp8wsSm2wZpABOhSzczaNfP1LJYHLbz7plA?e=0BaWlY 
+
+Link to cleaned and tokenized C++ data: https://iiithydresearch-my.sharepoint.com/:x:/g/personal/prit_kanadiya_research_iiit_ac_in/EYIRyQRQ8u1GlfMu9RgsenUBS3AqO43sFc26ZyQoNJQFWw?e=jcgFfJ 
 
 ## Additional Improvements
 
