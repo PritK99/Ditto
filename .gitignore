@@ -2,9 +2,12 @@
 final_data
 *data
 *raw_data
+*/logs
 
 # venv
 ditto
+
+*.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
