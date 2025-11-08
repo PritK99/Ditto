@@ -1,0 +1,40 @@
+|-VarDecl 0x5f111f1b2c60 <simple.c:3:1, col:9> col:5 x 'int' cinit
+| `-IntegerLiteral 0x5f111f1b2cc8 <col:9> 'int' 100
+|-FunctionDecl 0x5f111f1b2d98 <line:7:1, line:10:1> line:7:5 used square 'int (int)'
+| |-ParmVarDecl 0x5f111f1b2d00 <col:12, col:16> col:16 used x 'int'
+| `-CompoundStmt 0x5f111f1b30b8 <col:19, line:10:1>
+|   |-CallExpr 0x5f111f1b2f58 <line:8:5, col:19> 'int'
+|   | |-ImplicitCastExpr 0x5f111f1b2f40 <col:5> 'int (*)(const char *, ...)' <FunctionToPointerDecay>
+|   | | `-DeclRefExpr 0x5f111f1b2e48 <col:5> 'int (const char *, ...)' Function 0x5f111f1738d8 'printf' 'int (const char *, ...)'
+|   | |-ImplicitCastExpr 0x5f111f1b2fa0 <col:12> 'const char *' <NoOp>
+|   | | `-ImplicitCastExpr 0x5f111f1b2f88 <col:12> 'char *' <ArrayToPointerDecay>
+|   | |   `-StringLiteral 0x5f111f1b2eb0 <col:12> 'char[3]' lvalue "%d"
+|   | `-IntegerLiteral 0x5f111f1b2ed0 <col:18> 'int' 5
+|   `-ReturnStmt 0x5f111f1b30a8 <line:9:5, line:4:29>
+|     `-ParenExpr 0x5f111f1b3088 <col:19, col:29> 'int'
+|       `-BinaryOperator 0x5f111f1b3068 <col:20, col:28> 'int' '*'
+|         |-ImplicitCastExpr 0x5f111f1b3038 <col:20, col:22> 'int' <LValueToRValue>
+|         | `-ParenExpr 0x5f111f1b2fd8 <col:20, col:22> 'int' lvalue
+|         |   `-DeclRefExpr 0x5f111f1b2fb8 <line:9:16> 'int' lvalue ParmVar 0x5f111f1b2d00 'x' 'int'
+|         `-ImplicitCastExpr 0x5f111f1b3050 <line:4:26, col:28> 'int' <LValueToRValue>
+|           `-ParenExpr 0x5f111f1b3018 <col:26, col:28> 'int' lvalue
+|             `-DeclRefExpr 0x5f111f1b2ff8 <line:9:19> 'int' lvalue ParmVar 0x5f111f1b2d00 'x' 'int'
+`-FunctionDecl 0x5f111f1b3138 <line:12:1, line:16:1> line:12:5 main 'int ()'
+  `-CompoundStmt 0x5f111f1b3480 <col:12, line:16:1>
+    |-DeclStmt 0x5f111f1b3310 <line:13:5, col:22>
+    | `-VarDecl 0x5f111f1b31f8 <col:5, col:21> col:9 used r 'int' cinit
+    |   `-CallExpr 0x5f111f1b32e8 <col:13, col:21> 'int'
+    |     |-ImplicitCastExpr 0x5f111f1b32d0 <col:13> 'int (*)(int)' <FunctionToPointerDecay>
+    |     | `-DeclRefExpr 0x5f111f1b3260 <col:13> 'int (int)' Function 0x5f111f1b2d98 'square' 'int (int)'
+    |     `-IntegerLiteral 0x5f111f1b3280 <col:20> 'int' 5
+    |-CallExpr 0x5f111f1b33d8 <line:5:22, col:40> 'int'
+    | |-ImplicitCastExpr 0x5f111f1b33c0 <col:22> 'int (*)(const char *, ...)' <FunctionToPointerDecay>
+    | | `-DeclRefExpr 0x5f111f1b3328 <col:22> 'int (const char *, ...)' Function 0x5f111f1738d8 'printf' 'int (const char *, ...)'
+    | |-ImplicitCastExpr 0x5f111f1b3420 <col:29> 'const char *' <NoOp>
+    | | `-ImplicitCastExpr 0x5f111f1b3408 <col:29> 'char *' <ArrayToPointerDecay>
+    | |   `-StringLiteral 0x5f111f1b3348 <col:29> 'char[4]' lvalue "%d\n"
+    | `-ImplicitCastExpr 0x5f111f1b3438 <col:37, col:39> 'int' <LValueToRValue>
+    |   `-ParenExpr 0x5f111f1b3388 <col:37, col:39> 'int' lvalue
+    |     `-DeclRefExpr 0x5f111f1b3368 <line:14:15> 'int' lvalue Var 0x5f111f1b31f8 'r' 'int'
+    `-ReturnStmt 0x5f111f1b3470 <line:15:5, col:12>
+      `-IntegerLiteral 0x5f111f1b3450 <col:12> 'int' 0
