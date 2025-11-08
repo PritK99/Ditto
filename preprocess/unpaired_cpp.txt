@@ -1,2 +1,0 @@
-#include <iostream>\n using namespace std; bool conquer_gujarat(bool is_2070){if(is_2070==1){cout << "Yayy"; return true;}else{return true; // We will conquer anyways\n}}int main(){int a=5;return a;}
-#include <iostream>\nusing namespace std;\nclass Car{private:int x;};\nCar c1;
