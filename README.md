@@ -69,6 +69,56 @@ This should become
 
 For `simple.c` file, 
 
+```c
+// This is a rigorous test of preprocessing code 
+#include <stdio.h>
+#include <string.h>
+
+// Global variable
+int x = 100;
+
+// Macros
+#define MUL(a, b) ((a) * (b))
+#define PRINT_INT(x) printf("%d\n", (x))
+
+// Struct definition
+struct Car {
+    char* number_plate;
+    char* model_name;
+    int price;
+    int year_of_manufacture;
+};
+
+// Function to square a number
+int square(int x) {
+    printf("Squaring the number: %d\n", 5);
+    return MUL(x, x);
+}
+
+// Function to print Car info
+void print_car(struct Car c) {
+    printf("Car: %s, Model: %s, Price: %d, Year: %d\n",
+           c.number_plate, c.model_name, c.price, c.year_of_manufacture);
+}
+
+int main() {
+    // Example of using the square function
+    int r = square(5);
+    PRINT_INT(r);
+
+    // Example of using the struct
+    struct Car car1;
+    car1.number_plate = "ABC123";
+    car1.model_name = "Tesla Model S";
+    car1.price = 80000;
+    car1.year_of_manufacture = 2022;
+
+    print_car(car1);
+
+    return 0;
+}
+```
+
 ```
  ---- Transformed Code ----
 ['int', 'var0', '=', 'lit0', ';', 'struct', 'struct0', '{', 'char', '*', 'var1', ';', 'char', '*', 'var2', ';', 'int', 'var3', ';', 'int', 'var4', ';', '}', ';', 'int', 'func0', '(', 'int', 'var0', ')', '{', 'printf', '(', 'lit1', ',', 'lit2', ')', ';', 'return', '(', '(', 'var0', ')', '*', '(', 'var0', ')', ')', ';', '}', 'void', 'func1', '(', 'struct', 'struct0', 'var5', ')', '{', 'printf', '(', 'lit3', ',', 'var5', '.', 'var1', ',', 'var5', '.', 'var2', ',', 'var5', '.', 'var3', ',', 'var5', '.', 'var4', ')', ';', '}', 'int', 'main', '(', ')', '{', 'int', 'var6', '=', 'func0', '(', 'lit2', ')', ';', 'printf', '(', 'lit4', ',', '(', 'var6', ')', ')', ';', 'struct', 'struct0', 'var7', ';', 'var7', '.', 'var1', '=', 'lit5', ';', 'var7', '.', 'var2', '=', 'lit6', ';', 'var7', '.', 'var3', '=', 'lit7', ';', 'var7', '.', 'var4', '=', 'lit8', ';', 'func1', '(', 'var7', ')', ';', 'return', 'lit9', ';', '}']
@@ -91,6 +141,78 @@ Final output written to cleaned_simple.c
 ```
 
 For `simple.cpp` file,
+
+```cpp
+// This is a rigorous test of preprocessing code 
+#include <iostream>
+#include <vector>
+#include <string>
+
+// Base class
+class Vehicle {
+public:
+    std::string number_plate;
+    std::string model_name;
+    int price;
+    int year_of_manufacture;
+
+    Vehicle(const std::string& num, const std::string& model, int p, int year)
+        : number_plate(num), model_name(model), price(p), year_of_manufacture(year) {}
+
+    virtual void printInfo() const {
+        std::cout << "Vehicle: " << number_plate
+                  << ", Model: " << model_name
+                  << ", Price: $" << price
+                  << ", Year: " << year_of_manufacture << "\n";
+    }
+
+    virtual ~Vehicle() = default; // Always good to have virtual destructor in base class
+};
+
+// Derived class
+class Car : public Vehicle {
+public:
+    int num_doors;
+
+    Car(const std::string& num, const std::string& model, int p, int year, int doors)
+        : Vehicle(num, model, p, year), num_doors(doors) {}
+
+    void printInfo() const override {
+        Vehicle::printInfo();
+        std::cout << "Number of doors: " << num_doors << "\n";
+    }
+};
+
+// Function to square a number
+int square(int x) {
+    std::cout << "Squaring the number: " << x << "\n";
+    return x * x;
+}
+
+int main() {
+    // Using square function
+    int r = square(5);
+    std::cout << "Result: " << r << "\n";
+
+    // Using vectors and inheritance
+    std::vector<Vehicle*> vehicles;
+
+    // Add a Car object
+    vehicles.push_back(new Car("ABC123", "Tesla Model S", 80000, 2022, 4));
+    vehicles.push_back(new Vehicle("XYZ789", "Generic Vehicle", 30000, 2015));
+
+    // Print info for all vehicles
+    for (const auto& v : vehicles) {
+        v->printInfo();
+        std::cout << "--------------------\n";
+    }
+
+    // Clean up
+    for (auto v : vehicles) delete v;
+
+    return 0;
+}
+```
 
 ```
 ---- Transformed Code ----
