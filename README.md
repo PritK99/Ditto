@@ -63,5 +63,5 @@ This should become
 
     Hence the expected output is a CSV with all these fields.
 
-6) Because we know we are dealing with programming languages, we know our vocabulory size can not be big. SImilarly, our token size can not be big. This is because there can only be a few keywords that can be used in a language, and the keywords are generally short enough.
+6) Because we know we are dealing with programming languages, we know our vocabulory size can not be big. Similarly, our token size can not be big. This is because there can only be a few keywords that can be used in a language, and the keywords are generally short enough.
 
