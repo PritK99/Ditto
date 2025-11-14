@@ -3,18 +3,46 @@ import subprocess
 import os
 import tempfile
 import csv
+import logging
 from tqdm import tqdm
 from tokenize import obfuscate_and_tokenize  
+from multiprocessing import Pool, cpu_count
 
-def extract_includes_and_code_from_text(code_text):
-    """Extract include directives and the rest of the code."""
+logging.basicConfig(
+    level=logging.INFO,          
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    filename="preprocessing_logs.log",          
+    filemode="w"                 
+)
+
+def separate_includes_and_code_from_text(code_text):
+    """
+    Separate include directives and the rest of the code from the source code
+
+    Args:
+        code_text: code in text format
+
+    Returns:
+        includes: all include directives
+        code: code content other than include directives
+    """
     include_pattern = re.compile(r'^\s*#\s*include\s+[<"].+[>"].*$', re.MULTILINE)
     includes = "\n".join(include_pattern.findall(code_text)).strip()
     code = include_pattern.sub("", code_text).strip()
     return includes, code
 
-def preprocess_code_only(code_text, is_cpp=False):
-    """Preprocess code using gcc/g++ with -E -P."""
+def preprocess_code_only(code_text, idx, is_cpp=False):
+    """
+    Preprocess code using gcc/g++ with -E -P to resolve macros and comments
+
+    Args:
+        code_text: code in text format
+        idx: idx of code in csv file
+        is_cpp (bool): False if C, true if C++
+    
+    Returns:
+        result: preprocessed code
+    """
     try:
         suffix = ".cpp" if is_cpp else ".c"
         with tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False) as tmp:
@@ -33,12 +61,16 @@ def preprocess_code_only(code_text, is_cpp=False):
         os.remove(tmp_name)
         os.remove(out_name)
         return result
+    
     except subprocess.CalledProcessError as e:
-        print(f"[!] Preprocessing failed: {e}")
+        print(f"Preprocessing failed for code {idx+1}")
+        logging.info(f"Preprocessing failed for code {idx+1}")
         return ""
 
 def safe_clean_code(line):
-    """Remove non-ASCII or problematic Unicode/escape characters."""
+    """
+    Remove non-ASCII or problematic Unicode/escape characters.
+    """
     line = line.encode("ascii", errors="ignore").decode("ascii")
     line = line.replace("\\n", "\n").replace("\\t", "\t")
     return line
@@ -49,7 +81,7 @@ def process_txt_file(input_path, output_csv="output.csv"):
     """
     is_cpp = "_cpp" in input_path.lower()
 
-    # Prepare CSV output
+    # Preparing the CSV output
     fieldnames = [
         "line_number",
         "transformed_tokens",
@@ -72,10 +104,12 @@ def process_txt_file(input_path, output_csv="output.csv"):
                 continue
 
             try:
-                includes, code = extract_includes_and_code_from_text(line)
-                processed = preprocess_code_only(code, is_cpp)
+                includes, code = separate_includes_and_code_from_text(line)
+                processed = preprocess_code_only(code, i, is_cpp)
 
                 if not processed:
+                    print(f"Skipping code {i+1}")
+                    logging.info(f"Skipping code {i+1}")
                     continue
 
                 transformed_tokens, var_dict, func_dict, lit_dict, struct_dict, class_dict = obfuscate_and_tokenize(
@@ -93,12 +127,18 @@ def process_txt_file(input_path, output_csv="output.csv"):
                 })
 
             except Exception as e:
-                print(f"Error processing line {i + 1}: {e}")
+                print(f"Error processing line {i+1}: {e}")
+                print(f"Skipping code {i+1}")
+                logging.info(f"Error processing line {i+1}: {e}")
+                logging.info(f"Skipping code {i+1}")
                 continue
 
-    print(f"\nProcessing complete! Results written to {output_csv}")
+    print(f"\nProcessing completed. Results written to {output_csv}")
+    logging.info(f"\nProcessing completed. Results written to {output_csv}")
 
+# Process C and C++ raw data files
+input_path = "../data/unpaired_c.txt"
+process_txt_file(input_path, "c_tokens.csv")
 
-if __name__ == "__main__":
-    input_path = "../data/unpaired_c.txt"
-    process_txt_file(input_path, "c_tokens.csv")
+# input_path = "../data/unpaired_cpp.txt"
+# process_txt_file(input_path, "cpp_tokens.csv")
