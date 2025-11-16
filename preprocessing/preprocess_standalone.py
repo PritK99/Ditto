@@ -57,7 +57,7 @@ def preprocess_code_only(code_text, is_cpp = False):
     return result
 
 def main():
-    filename = "simple.cpp"
+    filename = "samples/test.cpp"
 
     is_cpp = False
     if (".cpp" in filename):
@@ -81,7 +81,7 @@ def main():
     print("\n---- Class Dict ----")
     print(class_dict)
 
-    with open(f"cleaned_{filename}", "w") as f:
+    with open(filename, "w") as f:
         f.write(f"{includes}\n\n{processed}")    # Combining includes and resolved code part back
 
     print(f"Final output written to cleaned_{filename}")

@@ -100,9 +100,10 @@ def obfuscate_and_tokenize(code_text, is_cpp = False):
 
     i = 0
     raw_tokens =list(tu.get_tokens(extent=tu.cursor.extent))
-
     for token in tu.get_tokens(extent=tu.cursor.extent):
-        new_token = token.spelling  # default: leave as-is
+        new_token = token.spelling  
+
+        fallback_flag = 0
 
         # print(token.spelling, token.kind)
 
@@ -113,8 +114,18 @@ def obfuscate_and_tokenize(code_text, is_cpp = False):
         if token.spelling in KEYWORDS:
             new_token = token.spelling
 
-        if (token.spelling == "std" or token.spelling == "main" or token.spelling == "cout" or token.spelling == "cin" or token.spelling == "override" or token.spelling == "vector"):
+        elif (token.spelling == "std" or token.spelling == "main" or token.spelling == "cout" or token.spelling == "cin" or token.spelling == "override" or token.spelling == "vector"):
             new_token = token.spelling
+        
+        elif(i > 0 and (transformed_tokens[-1] == "class" or transformed_tokens[-1] == "struct")):
+            if (transformed_tokens[-1] == "class"):
+                class_dict[token.spelling] = f"class{class_counter}"
+                class_counter += 1
+                new_token = class_dict[token.spelling]
+            else:
+                struct_dict[token.spelling] = f"struct{struct_counter}"
+                struct_counter += 1
+                new_token = struct_dict[token.spelling]
 
         # Sometimes the datatypes after std become field declarations
         elif (token.spelling == "string" or token.spelling == "int" or token.spelling == "char" or token.spelling == "float" or token.spelling == "double"):
@@ -134,38 +145,60 @@ def obfuscate_and_tokenize(code_text, is_cpp = False):
                     if token.spelling not in func_dict:
                         func_dict[token.spelling] = f"func{func_counter}"
                         func_counter += 1
-                    new_token = func_dict[token.spelling]
+                    
+                    if (token.spelling in func_dict):
+                        new_token = func_dict[token.spelling]
+                    else:
+                        fallback_flag = 1
 
                 elif cursor.kind in (CursorKind.VAR_DECL, CursorKind.PARM_DECL):
                     if token.spelling not in var_dict:
                         var_dict[token.spelling] = f"var{var_counter}"
                         var_counter += 1
-                    new_token = var_dict[token.spelling]
+                    
+                    if (token.spelling in var_dict):
+                        new_token = var_dict[token.spelling]
+                    else:
+                        fallback_flag = 1
+
 
                 elif cursor.kind == CursorKind.DECL_REF_EXPR:
                     if token.spelling in var_dict:
                         new_token = var_dict[token.spelling]
                     elif token.spelling in func_dict:
                         new_token = func_dict[token.spelling]
+                    else:
+                        fallback_flag = 1
         
                 elif cursor.kind == CursorKind.STRUCT_DECL:
                     if token.spelling not in struct_dict:
                         struct_dict[token.spelling] = f"struct{struct_counter}"
                         struct_counter += 1
-                    new_token = struct_dict[token.spelling]
+
+                    if (token.spelling in struct_dict):
+                        new_token = struct_dict[token.spelling]
+                    else:
+                        fallback_flag = 1
 
                 elif cursor.kind == CursorKind.FIELD_DECL or cursor.kind == CursorKind.MEMBER_REF_EXPR or cursor.kind == CursorKind.MEMBER_REF:
                     if token.spelling not in var_dict:
                         var_dict[token.spelling] = f"var{var_counter}"
                         var_counter += 1
-                    new_token = var_dict[token.spelling]
+                    
+                    if (token.spelling in var_dict):
+                        new_token = var_dict[token.spelling]
+                    else:
+                        fallback_flag = 1
                 
                 elif cursor.kind == CursorKind.CLASS_DECL or cursor.kind == CursorKind.CONSTRUCTOR or cursor.kind == CursorKind.DESTRUCTOR:
                     if (cursor.kind == CursorKind.CONSTRUCTOR):    # The variables in constructor parameter also belong to constructor cursor
                         if token.spelling in class_dict:
                             new_token = class_dict[token.spelling]
                         else:
-                            new_token = var_dict[token.spelling]
+                            if (token.spelling in var_dict):
+                                new_token = var_dict[token.spelling]
+                            else:
+                                fallback_flag = 1
 
                     elif token.spelling not in class_dict:
                         class_dict[token.spelling] = f"class{class_counter}"
@@ -187,6 +220,32 @@ def obfuscate_and_tokenize(code_text, is_cpp = False):
                 # If nothing matches, we check all dictionaries and set the object to be variable or function if we dont find anything
                 # This is meant to deal with cursor.COMPOUND_STMT type of tokens
                 else:
+                    # Brute force search
+                    if token.spelling in var_dict:
+                        new_token = var_dict[token.spelling]
+                    elif token.spelling in func_dict:
+                        new_token = func_dict[token.spelling]
+                    elif token.spelling in struct_dict:
+                        new_token = struct_dict[token.spelling]
+                    elif token.spelling in lit_dict:
+                        new_token = lit_dict[token.spelling]
+                    elif token.spelling in class_dict:
+                        new_token = class_dict[token.spelling]
+                    # Make all unknown objects as variable if they dont like a function
+                    else:
+                        if (i+1 < len(raw_tokens) and raw_tokens[i+1].spelling == "("):
+                            if token.spelling not in func_dict:
+                                func_dict[token.spelling] = f"func{func_counter}"
+                                func_counter += 1
+                            new_token = func_dict[token.spelling]
+                        elif token.spelling not in var_dict:
+                            var_dict[token.spelling] = f"var{var_counter}"
+                            var_counter += 1
+                            new_token = var_dict[token.spelling]
+                        else:
+                            new_token = var_dict[token.spelling]
+                
+                if (fallback_flag == 1):
                     # Brute force search
                     if token.spelling in var_dict:
                         new_token = var_dict[token.spelling]

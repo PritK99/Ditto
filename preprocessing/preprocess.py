@@ -11,7 +11,7 @@ from multiprocessing import Pool, cpu_count
 logging.basicConfig(
     level=logging.INFO,          
     format="%(asctime)s - %(levelname)s - %(message)s",
-    filename="preprocessing_logs.log",          
+    filename="preprocessing_cpp_logs.log",          
     filemode="w"                 
 )
 
@@ -111,7 +111,7 @@ def process_txt_file(input_path, output_csv="output.csv"):
                     print(f"Skipping code {i+1}")
                     logging.info(f"Skipping code {i+1}")
                     continue
-
+                
                 transformed_tokens, var_dict, func_dict, lit_dict, struct_dict, class_dict = obfuscate_and_tokenize(
                     processed, is_cpp
                 )
@@ -137,8 +137,8 @@ def process_txt_file(input_path, output_csv="output.csv"):
     logging.info(f"\nProcessing completed. Results written to {output_csv}")
 
 # Process C and C++ raw data files
-input_path = "../data/unpaired_c.txt"
-process_txt_file(input_path, "c_tokens.csv")
+# input_path = "../data/unpaired_c.txt"
+# process_txt_file(input_path, "c_tokens.csv")
 
-# input_path = "../data/unpaired_cpp.txt"
-# process_txt_file(input_path, "cpp_tokens.csv")
+input_path = "../data/unpaired_cpp.txt"
+process_txt_file(input_path, "cpp_tokens.csv")

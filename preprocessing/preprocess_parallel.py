@@ -1,9 +1,11 @@
 import re
+import sys
 import subprocess
 import os
 import tempfile
 import csv
 import logging
+import multiprocessing
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 from tokenize import obfuscate_and_tokenize  
@@ -12,7 +14,7 @@ from tokenize import obfuscate_and_tokenize
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    filename="preprocessing_logs.log",
+    filename="preprocessing_cpp_logs.log",
     filemode="w"
 )
 
@@ -88,7 +90,10 @@ def process_single_line(args):
         )
 
     except Exception as e:
-        logging.info(f"Error processing line {i+1}: {e}")
+        print(f"Error processing code {i+1}: {e}")
+        line = safe_clean_code(raw_line.strip())
+        print(line)
+        logging.info(f"Error processing code {i+1}: {e}")
         return None
 
 # ---------------------- Main Parallel Processing Function ----------------------
@@ -150,5 +155,5 @@ def process_txt_file_parallel(input_path, output_csv="output.csv", workers=None)
 
 
 if __name__ == "__main__":
-    input_path = "../data/unpaired_c.txt"
-    process_txt_file_parallel(input_path, "c_tokens.csv", 10)
+    input_path = "../data/unpaired_cpp.txt"
+    process_txt_file_parallel(input_path, "cpp_tokens.csv", 15)
