@@ -2,6 +2,8 @@
 
 This section deals with conversion of code in raw form to tokens. 
 
+## Methodology
+
 ## Requirements
 
 1) Code Obfuscation: All the user defined entities i.e. variables, user defined functions, and literals, should be obfuscated like `var0`, `func0`, and `lit0`.
