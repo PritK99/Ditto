@@ -1,5 +1,17 @@
 ## Data Collection
 
+## Constraints
+
+We added the following constraints to our dataset collection phase:
+
+1) Compilability: We added a constraint that all the files used for training the transpiler should be compilable. That is, there should be no external dependencies in the file except for the standard libraries. We hope that this will ensure the model learns the correct syntactical nature of the code. This should also ensure that each file doesn’t have any external dependency. 
+
+2) Object-oriented nature of C++: We added a constraint to collect C++ data that actively implements Object-Oriented Programming (OOP) principles, in the hopes that the transpiler will learn to do procedural-to-class translation and vice versa. 
+
+3) Rich data focus: The transpiler should be capable of performing complex tasks such as function calls and handling different datatypes such as structs. For this, we collected data that incorporates complex functionality to ensure the transpiler can handle multiple interdepen- dent functions. 
+
+4) Single file focus: We wanted the transpiler to emit compilable code. Hence, we added a constraint that the dataset should focus on entire files rather than individual functions. The compilability constraint will ensure that the dataset is indeed compilable
+
 ## Methodology
 
 ### Transcodeocean

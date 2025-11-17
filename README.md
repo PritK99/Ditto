@@ -15,6 +15,8 @@
   - [Methodology](#methodology)
       - [Data Collection](#data-collection)
       - [Preprocessing](#preprocessing)
+      - [Model Architecture](#model-architecture)
+      - [Evaluation](#evaluation)
   - [File Structure](#file-structure)
   - [Getting started](#Getting-Started)
   - [Future Goals](#future-goals)
@@ -37,9 +39,21 @@ Link to Tokenized Data (With LCA): N/A
 
 ## Methodology
 
-The methodology comprises of 3 major sections: Data Collection, Preprocessing, Model Architecture.
+The methodology comprises of 4 major sections: Data Collection, Preprocessing, Model Architecture and Evaluation.
 
 ### Data Collection
+
+The below table enlists some major sources of data that we used to create our dataset.
+
+<p align="center">
+  <img src="assets/img/data-sources.png" alt="data-sources">
+</p>
+
+This spreadsheet contains the list of GitHub repositories we used to obtain data: https://docs.google.com/spreadsheets/d/1GKgE6r3UVirJbOs1KG2cyKQyNwJphTpj2JwjQkrZtrs/edit?gid=0#gid=0 
+
+After aggregating data from all sources, we have ~1.2L C code snippets and ~65K C++ code snippets. These are available in `data` section of README as Raw Data.
+
+For more details on Data Collection section along with examples, please refer `data-collection/README.md`. 
 
 ### Preprocessing
 
@@ -76,3 +90,5 @@ This should become
 In addition to these tokens, we should recieve the mappings for obfuscated variables, functions, classes, structs, literals, etc. 
 
 For more details on preprocessing section along with examples, please refer `preprocessing/README.md`. 
+
+### Model Architecture
