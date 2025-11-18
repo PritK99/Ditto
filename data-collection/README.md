@@ -130,5 +130,3 @@ Now running the extract.py will extract all the files that are compilable. Pleas
 ### Scraping repositories for C++ files from Github
 
 We scraped the [following repositories](https://docs.google.com/spreadsheets/d/1GKgE6r3UVirJbOs1KG2cyKQyNwJphTpj2JwjQkrZtrs/edit?gid=0#gid=0) to fetch data from Github. Clone the repository in the workspace using git clone. Then copy the `filter_compilable_files.sh` to the directory. Once we run this file, it will move all the compilable files from the repo to the folder - `compiled_success_executables`
-
-## Implementation Details
