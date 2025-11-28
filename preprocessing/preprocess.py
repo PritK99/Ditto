@@ -5,13 +5,13 @@ import tempfile
 import csv
 import logging
 from tqdm import tqdm
-from tokenize import obfuscate_and_tokenize  
+from tokenizer import obfuscate_and_tokenize  
 from multiprocessing import Pool, cpu_count
 
 logging.basicConfig(
     level=logging.INFO,          
     format="%(asctime)s - %(levelname)s - %(message)s",
-    filename="preprocessing_cpp_logs.log",          
+    filename="../assets/preprocessing_logs/preprocessing_cpp_logs.log",          
     filemode="w"                 
 )
 
@@ -138,7 +138,7 @@ def process_txt_file(input_path, output_csv="output.csv"):
 
 # Process C and C++ raw data files
 # input_path = "../data/unpaired_c.txt"
-# process_txt_file(input_path, "c_tokens.csv")
+# process_txt_file(input_path, "../data/c_tokens.csv")
 
 input_path = "../data/unpaired_cpp.txt"
-process_txt_file(input_path, "cpp_tokens.csv")
+process_txt_file(input_path, "../data/cpp_tokens.csv")

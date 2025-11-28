@@ -8,7 +8,7 @@ import logging
 import multiprocessing
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
-from tokenize import obfuscate_and_tokenize  
+from tokenizer import obfuscate_and_tokenize  
 
 # ---------------------- Logging Setup ----------------------
 logging.basicConfig(
@@ -156,4 +156,4 @@ def process_txt_file_parallel(input_path, output_csv="output.csv", workers=None)
 
 if __name__ == "__main__":
     input_path = "../data/unpaired_cpp.txt"
-    process_txt_file_parallel(input_path, "cpp_tokens.csv", 15)
+    process_txt_file_parallel(input_path, "../data/cpp_tokens.csv", 15)

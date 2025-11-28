@@ -5,7 +5,7 @@ import subprocess
 import sys
 import os
 import tempfile
-from tokenize import obfuscate_and_tokenize
+from tokenizer import obfuscate_and_tokenize
 
 def extract_includes_and_code(filename):
     """
