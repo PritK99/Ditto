@@ -112,7 +112,7 @@ For more details on model section, please refer `model/README.md`.
 
 ### Data
 
-For C and C++,
+For both C and C++,
 
 Link to Raw Data: https://iiithydresearch-my.sharepoint.com/:f:/g/personal/prit_kanadiya_research_iiit_ac_in/IgDFA0seHhbKRonY97Qo3D8gAYFGnBhadsJY7dEPP4YQMfQ?e=ZQW5Hf 
 
