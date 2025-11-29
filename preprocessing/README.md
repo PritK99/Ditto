@@ -31,9 +31,20 @@ This section deals with conversion of code in raw form to tokens.
 
 ## Implementation Details
 
+First, we need to create a `data` directory in the base folder and download the raw data (link provided in `README.md`). Next, we need to run `preprocess_parallel.py`. Please note that you might need to change a few values and path to data depending on your system. This will create `c_tokens.csv` and `cpp_tokens.csv` in the data directory. Also, this process is time consuming. The resultant CSVs can be downloaded from the link provided in `README.md` as well. Now, we need to remove the code snippets whose tokens are too lengthy. For this we use `analyze.py`. The resultant CSVs are `c_tokens_analyzed.csv` and `cpp_tokens_analyzed.csv` respectively. In addition to that, we will also get vocabulory CSVs for both languages. These files can also be directly downloaded from link provided in `README.md`. Finally, we run `clean.py` to obtain `c_tokens_final.csv` and `cpp_tokens_final.csv` which are void of spurious data. We define spurious data as those which contain more than `10%` of their tokens as `UNK`. `UNK` tokens are the tokens which only occur few times in codes (for example, belong only to one code line), or have low overall frequency. W make this decision using vocabulory obtained from `analyze.py`.
+
+In summary,
+
+| Step | Script                      | Input Required                                                           | Output Generated                                                                                                    | Description                                                          |
+| ---- | --------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| 1    | `preprocess_parallel.py`    | `data/unpaired_c.txt` and `data/unpaired_cpp.txt`                                               | `c_tokens.csv` and `cpp_tokens.csv`                                                                                 | Tokenizes raw C and C++ code.        |
+| 2    | `analyze.py`                | `c_tokens.csv` and `cpp_tokens.csv`                                        | `c_tokens_analyzed.csv`, `cpp_tokens_analyzed.csv`, `c_vocab_counts.csv` and `cpp_vocab_counts.csv` | Removes long-token sequences and builds vocabulary.  |
+| 3    | `clean.py`                  | `c_tokens_analyzed.csv`, `cpp_tokens_analyzed.csv`, `c_vocab_counts.csv` and `cpp_vocab_counts.csv`                                          | `c_tokens_final.csv`, `cpp_tokens_final.csv`,  `c_vocab_final.csv` and `cpp_vocab_final.csv`                                                           | Removes rows based on vocabulary frequencies. |
+
+
 **Note 1**: `preprocess_parallel.py` for C++ code takes a lot of time. This is because some codes contain around 15L - 20L characters. Due to this, the progress bar might not update for long time. However, this THE time taken to compute tokens for the massive code files. For C, processing tokens required around 3 hours using 10 CPU cores. This was way faster compared to C++ because of two reasons. First, the C code snippets that we have collected are not as large as C++ code snippets. Second, parsing C is easier than C++. For C++, processing tokens required around 60 hours using 15 CPU cores.
 
-**Note 2**: The following code files were discarded because these are not compilable.
+**Note 2**: The following code files were discarded from the raw data file because these are not compilable.
 
 C: `[
     258, 3982, 15852, 21382, 27197, 29811, 31107, 33128, 34797, 37503,
@@ -51,6 +62,8 @@ C++: `[
     50084, 51873, 52124, 52740, 55837, 56396, 57183, 58133, 60596,
     61114, 61593, 61674
 ]`
+
+**Note 3**: Some of the codes (particularly in C++) are massive. Almost `23%` of the C++ and `5%` of C data obtained after preprocessing has `num_tokens > 1000`. Infact, there are a few code snippets where the `num_tokens = 5,00,000`. We can not use these code snippets for our usecase. Hence `analysis.py` analyzes the results obtained after preprocessing and creates new csv where we ensure that each row in the new data is useful for our model. The discarded code indexes from the CSVs obtained after preprocessing are listed in `assets/preprocessing_logs/`. The new tokens are saved in `data/c_tokens_analyzed.csv` and `data/cpp_tokens_analyzed.csv`. The corresponding vocabulory is stored in `data/c_vocab_raw.csv` and `data/cpp_vocab_raw.csv`. Please note that this is not the final vocabulory. While we have discarded all the lengthy rows, we have not dealt with spurious tokens. For that, we require `clean.py`.
 
 ## Examples
 

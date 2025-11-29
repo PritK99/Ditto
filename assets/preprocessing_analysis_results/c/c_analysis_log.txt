@@ -1,9 +1,0 @@
-Max token list length: inf
-Min token list length: 9
-Avg token list length: 734.3940169372854
-
-Max token length: 274
-Min token length: 1
-Avg token length: 3.10
-Total vocabulary size: 18871
-
