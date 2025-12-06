@@ -1,8 +1,0 @@
-#include <iostream> \n # include <vector> \n // Welcome to Ditto!\n 
-
-
-
-
-
-
-using namespace std; int main () { cout << 5;}

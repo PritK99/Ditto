@@ -1,11 +1,11 @@
 import re
-import json
+import ast
 import ctypes
 import os
-import pandas as pd
-import sys
 import csv
-import unicodedata
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
 from tree_sitter import Language, Parser, Node
 from typing import List, Tuple, Optional, Dict, Any
 
@@ -14,7 +14,6 @@ CPP_LIB_PATH = os.path.expanduser('~/tree-sitter-cpp/cpp_language_lib.so')
 
 def clean_code(code: str) -> str:
     code = code.replace("\\n", "\n")
-    code = bytes(code, "utf-8").decode("unicode_escape")
     code = re.sub(r'#\s*include\s*(<[^>]*>|"[^"]*")', '', code)
     code = re.sub(r'/\*.*?\*/', '', code, flags=re.DOTALL)
     code = re.sub(r'//[^\n]*', '', code)
@@ -173,166 +172,45 @@ def build_and_merge_tokens(leaf_nodes: List[Node], code_bytes: bytes) -> List[Di
         i += 1
     return merged
 
-LITERAL_REGEX = re.compile(r'^[+-]?\d+(\.\d*)?([eE][+-]?\d+)?[uUlLlF]*$')
-
-# never obfuscate these stream identifiers
-ALWAYS_KEEP = {"cin", "cout", "cerr", "clog", "namespace", "std"}
-
-def obfuscate_token_text(token, var_map, lit_map, func_map,
-                         var_counter, lit_counter, func_counter,
-                         declared_funcs: set,
-                         stream_candidates: set):
-    txt = token['text'].strip()
-    types = set(token.get('types', []))
-    node = token['nodes'][0] if token.get('nodes') else None
-
-    if txt in ALWAYS_KEEP:
-        return txt, var_counter, lit_counter, func_counter
-
-    LITERAL_TYPES = {'number_literal', 'string_literal', 'char_literal', 'true', 'false'}
-
-    def safe_type(n):
-        try:
-            return n.type
-        except Exception:
-            return ""
-
-    def is_identifier_node(n):
-        return n is not None and safe_type(n) in ("identifier", "field_identifier")
-
-    def is_namespace_like_text(s: str) -> bool:
-        return "::" in s or s == "std"
-
-    # preprocessor
-    if txt.startswith("#"):
-        return txt, var_counter, lit_counter, func_counter
-
-    # literals
-    is_literal_type = types.intersection(LITERAL_TYPES)
-    is_quoted = (txt.startswith('"') and txt.endswith('"')) or (txt.startswith("'") and txt.endswith("'"))
-    is_numeric = LITERAL_REGEX.match(txt)
-    if is_literal_type or is_quoted or is_numeric:
-        if txt not in lit_map:
-            lit_map[txt] = f"lit{lit_counter}"
-            lit_counter += 1
-        return lit_map[txt], var_counter, lit_counter, func_counter
-
-    # identifiers
-    if is_identifier_node(node):
-        if is_namespace_like_text(txt):
-            return txt, var_counter, lit_counter, func_counter
-        if txt in stream_candidates:
-            return txt, var_counter, lit_counter, func_counter
-
-        parent = node.parent
-        ptype = safe_type(parent)
-        if ptype in {"function_declarator", "function_definition"}:
-            if txt not in func_map:
-                func_map[txt] = f"func{func_counter}"
-                func_counter += 1
-            declared_funcs.add(txt)
-            return func_map[txt], var_counter, lit_counter, func_counter
-        
-        cur = node
-        is_call = False
-        while cur:
-            if "call" in safe_type(cur):
-                is_call = True
-                break
-            cur = cur.parent
-
-        if is_call:
-            if txt in declared_funcs:
-                if txt not in func_map:
-                    func_map[txt] = f"func{func_counter}"
-                    func_counter += 1
-                return func_map[txt], var_counter, lit_counter, func_counter
-            return txt, var_counter, lit_counter, func_counter
-        
-        if txt not in var_map:
-            var_map[txt] = f"var{var_counter}"
-            var_counter += 1
-        return var_map[txt], var_counter, lit_counter, func_counter
-    return txt, var_counter, lit_counter, func_counter
-
-def calculate_all_pairwise_distances(tokens: List[Dict[str, Any]]) -> Tuple[
-        List[Dict[str, Any]], Dict[str, str], Dict[str, str], Dict[str, str], List[str]]:
-    results = []
-    var_map, lit_map, func_map = {}, {}, {}
-    var_counter = lit_counter = func_counter = 0
-
-    declared_funcs = set()
-    stream_candidates = set()
-    tok_texts = [t['text'].strip() for t in tokens]
-
-    for t in tokens:
-        node = t.get('nodes', [None])[0]
-        if node is None:
-            continue
-        parent = node.parent
-        if parent is not None:
-            ptype = getattr(parent, "type", "")
-            if ptype in ("function_declarator", "function_definition"):
-                declared_funcs.add(t['text'].strip())
-
-    for i, txt in enumerate(tok_texts):
-        if txt in ("<<", ">>"):
-            if i-1 >= 0:
-                left = tok_texts[i-1]
-                if re.match(r'^[A-Za-z_]\w*$', left):
-                    stream_candidates.add(left)
-            if i+1 < len(tok_texts):
-                right = tok_texts[i+1]
-                if re.match(r'^[A-Za-z_]\w*$', right):
-                    stream_candidates.add(right)
-
-    for i in range(len(tok_texts)-2):
-        if tok_texts[i] == "using" and tok_texts[i+1] == "namespace" and tok_texts[i+2] == "std":
-            stream_candidates.add("std")
-
-    obfuscated = []
-    for t in tokens:
-        obf, var_counter, lit_counter, func_counter = obfuscate_token_text(
-            t, var_map, lit_map, func_map,
-            var_counter, lit_counter, func_counter,
-            declared_funcs, stream_candidates
-        )
-        obfuscated.append(obf)
+def calculate_all_pairwise_distances(tokens: List[Dict[str, Any]]):
+    dist_matrix = np.zeros((len(tokens), len(tokens)), dtype=int)
 
     for i, a in enumerate(tokens):
         for j, b in enumerate(tokens[i:], start=i):
             rep_a, rep_b = a['rep_node'], b['rep_node']
             if rep_a is None or rep_b is None:
-                lca, dist = None, -1
+                dist = -1
             elif rep_a == rep_b:
-                lca, dist = rep_a, 0
+                dist = 0
             else:
                 lca, dist = calculate_tree_distance_nodes(rep_a, rep_b)
-            A_obf = obfuscated[i]
-            B_obf = obfuscated[j]
-            results.append({
-                'A_text': a['text'].strip(),
-                'B_text': b['text'].strip(),
-                'A_pos':  (a['start'], a['end']),
-                'B_pos':  (b['start'], b['end']),
-                'Distance': dist
-            })
 
-    return results, var_map, lit_map, func_map, obfuscated
+            dist_matrix[i, j] = dist
+            dist_matrix[j, i] = dist  
+
+    return dist_matrix
+
+def reconstruct_full_matrix(triu_vector, num_tokens):
+    mat = np.zeros((num_tokens, num_tokens), dtype=int)
+    triu_indices = np.triu_indices(num_tokens)
+    mat[triu_indices] = triu_vector
+    mat = mat + np.triu(mat, 1).T  
+    return mat
 
 if __name__ == "__main__":
     is_cpp = True
     parser = make_parser(is_cpp)
 
-    file_path = "unpaired_cpp.txt"
+    df = pd.read_csv("../data/c_cleaned_tokens.csv")
+    tokens = list(df["transformed_tokens"])
+    line_numbers = list(df["line_number"])
 
-    with open(file_path, "r", encoding="utf-8") as f:
-        all_lines = f.readlines()
-    
-    for line in all_lines:
-        clean_line = clean_code(line)
-        print(clean_line)
+    dist_dict = {}
 
+    for line_number, token in tqdm(zip(line_numbers, tokens), total=len(tokens)):
+        code_tokens = ast.literal_eval(token)
+        code = " ".join(code_tokens)
+        clean_line = clean_code(code)
         clean_line_bytes = clean_line.encode("utf8")
         tree = parser.parse(clean_line_bytes)
         root = tree.root_node
@@ -341,13 +219,12 @@ if __name__ == "__main__":
 
         leaves = collect_leaf_nodes(root, clean_line_bytes)
         merged_tokens = build_and_merge_tokens(leaves, clean_line_bytes)
-        results, var_map, lit_map, func_map, obf_tokens = calculate_all_pairwise_distances(merged_tokens)
+        dist_matrix = calculate_all_pairwise_distances(merged_tokens)
+        
+        print(code_tokens)
+        print(dist_matrix[0, :])
 
-        for r in results:
-            A = r['A_text']
-            B = r['B_text']
-            A_s, A_e = r['A_pos']
-            B_s, B_e = r['B_pos']
-            dist = r['Distance']
+        triu_indices = np.triu_indices(len(dist_matrix))
+        dist_vector = dist_matrix[triu_indices]
 
-            print(f"({A}, {B}) ([{A_s} {A_e}], [{B_s} {B_e}]) {dist}")
+        dist_dict[line_number] = dist_vector

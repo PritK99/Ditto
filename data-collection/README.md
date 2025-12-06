@@ -1,4 +1,16 @@
-## Data Collection
+# Data Collection
+
+## Introduction
+
+The below table enlists some major sources of data that we used to create our dataset.
+
+<p align="center">
+  <img src="../assets/img/data-sources.png" alt="data-sources">
+</p>
+
+This spreadsheet contains the list of GitHub repositories we used to obtain data: https://docs.google.com/spreadsheets/d/1GKgE6r3UVirJbOs1KG2cyKQyNwJphTpj2JwjQkrZtrs/edit?gid=0#gid=0 
+
+After aggregating data from all sources, we have ~1.2L C code snippets and ~65K C++ code snippets. These are available in `data` section of README as Raw Data.
 
 ## Constraints
 

@@ -39,7 +39,7 @@ In summary,
 | ---- | --------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | 1    | `preprocess_parallel.py`    | `data/unpaired_c.txt` and `data/unpaired_cpp.txt`                                               | `c_tokens.csv` and `cpp_tokens.csv`                                                                                 | Tokenizes raw C and C++ code.        |
 | 2    | `analyze.py`                | `c_tokens.csv` and `cpp_tokens.csv`                                        | `c_tokens_analyzed.csv`, `cpp_tokens_analyzed.csv`, `c_vocab_counts.csv` and `cpp_vocab_counts.csv` | Removes long-token sequences and builds vocabulary.  |
-| 3    | `clean.py`                  | `c_tokens_analyzed.csv`, `cpp_tokens_analyzed.csv`, `c_vocab_counts.csv` and `cpp_vocab_counts.csv`                                          | `c_tokens_final.csv`, `cpp_tokens_final.csv`,  `c_vocab_final.csv` and `cpp_vocab_final.csv`                                                           | Removes rows based on vocabulary frequencies. |
+| 3    | `clean.py`                  | `c_tokens_analyzed.csv`, `cpp_tokens_analyzed.csv`, `c_vocab_counts.csv` and `cpp_vocab_counts.csv`                                          | `c_cleaned_tokens.csv`, `cpp_cleaned_tokens.csv`,  and `final_vocab_combined.txt`.csv`                                                           | Cleans rows based on vocabulary frequencies. |
 
 
 **Note 1**: `preprocess_parallel.py` for C++ code takes a lot of time. This is because some codes contain around 15L - 20L characters. Due to this, the progress bar might not update for long time. However, this THE time taken to compute tokens for the massive code files. For C, processing tokens required around 3 hours using 10 CPU cores. This was way faster compared to C++ because of two reasons. First, the C code snippets that we have collected are not as large as C++ code snippets. Second, parsing C is easier than C++. For C++, processing tokens required around 60 hours using 15 CPU cores.
@@ -64,6 +64,8 @@ C++: `[
 ]`
 
 **Note 3**: Some of the codes (particularly in C++) are massive. Almost `23%` of the C++ and `5%` of C data obtained after preprocessing has `num_tokens > 1000`. Infact, there are a few code snippets where the `num_tokens = 5,00,000`. We can not use these code snippets for our usecase. Hence `analysis.py` analyzes the results obtained after preprocessing and creates new csv where we ensure that each row in the new data is useful for our model. The discarded code indexes from the CSVs obtained after preprocessing are listed in `assets/preprocessing_logs/`. The new tokens are saved in `data/c_tokens_analyzed.csv` and `data/cpp_tokens_analyzed.csv`. The corresponding vocabulory is stored in `data/c_vocab_raw.csv` and `data/cpp_vocab_raw.csv`. Please note that this is not the final vocabulory. While we have discarded all the lengthy rows, we have not dealt with spurious tokens. For that, we require `clean.py`.
+
+**Note 4**: `lca.py` computes LCA distance matrix for a given input CSV file. However, we cant use it to generate data since the output file will be way to massive to store (~30 GBs). 
 
 ## Examples
 
