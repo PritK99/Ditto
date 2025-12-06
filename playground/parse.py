@@ -1,20 +1,25 @@
-#!/usr/bin/env python3
 import re
 import json
 import ctypes
 import os
+import pandas as pd
 import sys
 import csv
 import unicodedata
 from tree_sitter import Language, Parser, Node
 from typing import List, Tuple, Optional, Dict, Any
 
-# -------------------------------------------------------------
-# Configuration
-# Replace the paths below with your actual path i.e. path to .so file after generating them from corresponding githubs.
-# -------------------------------------------------------------
-CPP_LIB_PATH = os.path.expanduser('~/tree-sitter-cpp/cpp_language_lib.so')
 C_LIB_PATH   = os.path.expanduser('~/tree-sitter-c/c_language_lib.so')
+CPP_LIB_PATH = os.path.expanduser('~/tree-sitter-cpp/cpp_language_lib.so')
+
+def clean_code(code: str) -> str:
+    code = code.replace("\\n", "\n")
+    code = bytes(code, "utf-8").decode("unicode_escape")
+    code = re.sub(r'#\s*include\s*(<[^>]*>|"[^"]*")', '', code)
+    code = re.sub(r'/\*.*?\*/', '', code, flags=re.DOTALL)
+    code = re.sub(r'//[^\n]*', '', code)
+    code = "\n".join(line for line in code.splitlines() if line.strip())
+    return code
 
 def load_language(lib_path: str, symbol: str) -> Language:
     if not os.path.exists(lib_path):
@@ -33,9 +38,15 @@ def make_parser(is_cpp: bool) -> Parser:
     parser.language = lang
     return parser
 
-# -------------------------------------------------------------
-# Functions for LCA
-# -------------------------------------------------------------
+def print_tree(node, code_bytes, indent="", is_last=True):
+    prefix = indent + ("└── " if is_last else "├── ")
+    snippet = code_bytes[node.start_byte:node.end_byte].decode("utf8", errors="ignore")
+    print(f"{prefix}{node.type}: {snippet!r}")
+    new_indent = indent + ("    " if is_last else "│   ")
+    child_count = len(node.children)
+    for i, child in enumerate(node.children):
+        print_tree(child, code_bytes, new_indent, i == child_count - 1)
+
 def get_ancestors(node: Node) -> List[Node]:
     ancestors = []
     cur = node
@@ -80,9 +91,6 @@ def calculate_tree_distance_nodes(a: Node, b: Node) -> Tuple[Optional[Node], int
 
     return lca, depth_to_ancestor(a, lca) + depth_to_ancestor(b, lca)
 
-# ==========================================================
-# Functions for Token Management
-# ==========================================================
 def collect_leaf_nodes(root: Node, code_bytes: bytes) -> List[Node]:
     leaves = []
     def walk(n):
@@ -118,7 +126,6 @@ def build_and_merge_tokens(leaf_nodes: List[Node], code_bytes: bytes) -> List[Di
         txt = t['text'].strip()
         nxt_txt = next_t['text'].strip() if next_t else ''
 
-        # --- Merge preprocessor (#include etc.)
         if txt == '#' and nxt_txt in ('include', 'define', 'pragma', 'error', 'warning', 'if', 'ifdef', 'ifndef', 'elif', 'else', 'endif'):
             combined = f"#{nxt_txt}"
             nodes = t['nodes'] + next_t['nodes']
@@ -134,7 +141,6 @@ def build_and_merge_tokens(leaf_nodes: List[Node], code_bytes: bytes) -> List[Di
             i += 2
             continue
 
-        # --- Merge multi-part string/char literals
         parent = t['nodes'][0].parent
         if parent and parent.type in {'string_literal', 'char_literal'}:
             nodes_to_merge = t['nodes']
@@ -142,15 +148,13 @@ def build_and_merge_tokens(leaf_nodes: List[Node], code_bytes: bytes) -> List[Di
             j = i + 1
             while j < len(tokens):
                 next_check = tokens[j]
-                # Check if the next token also belongs to the *same* string/char literal parent
                 if next_check['nodes'][0].parent == parent:
                     nodes_to_merge += next_check['nodes']
                     combined_text += next_check['text']
                     j += 1
                 else:
                     break
-            
-            # Use the end byte of the last token merged
+
             end_byte = tokens[j - 1]['end'] if j > i else t['end']
             
             rep = find_lca_of_nodes(nodes_to_merge)
@@ -169,9 +173,6 @@ def build_and_merge_tokens(leaf_nodes: List[Node], code_bytes: bytes) -> List[Di
         i += 1
     return merged
 
-# ==========================================================
-# Obfuscation Code 
-# ==========================================================
 LITERAL_REGEX = re.compile(r'^[+-]?\d+(\.\d*)?([eE][+-]?\d+)?[uUlLlF]*$')
 
 # never obfuscate these stream identifiers
@@ -218,26 +219,20 @@ def obfuscate_token_text(token, var_map, lit_map, func_map,
 
     # identifiers
     if is_identifier_node(node):
-        # 1) If token text looks like namespace/qualified name, keep it
         if is_namespace_like_text(txt):
             return txt, var_counter, lit_counter, func_counter
-
-        # 2) If token was detected as a stream-object candidate (via token adjacency to << or >>), keep it
         if txt in stream_candidates:
             return txt, var_counter, lit_counter, func_counter
 
         parent = node.parent
         ptype = safe_type(parent)
-
-        # 3) Function declaration / definition -> record and obfuscate
         if ptype in {"function_declarator", "function_definition"}:
             if txt not in func_map:
                 func_map[txt] = f"func{func_counter}"
                 func_counter += 1
             declared_funcs.add(txt)
             return func_map[txt], var_counter, lit_counter, func_counter
-
-        # 4) Function call detection: search ancestors for a 'call' type
+        
         cur = node
         is_call = False
         while cur:
@@ -247,39 +242,29 @@ def obfuscate_token_text(token, var_map, lit_map, func_map,
             cur = cur.parent
 
         if is_call:
-            # If user-defined (declared in this snippet) -> obfuscate
             if txt in declared_funcs:
                 if txt not in func_map:
                     func_map[txt] = f"func{func_counter}"
                     func_counter += 1
                 return func_map[txt], var_counter, lit_counter, func_counter
-            # Else: external/stdlib -> keep as-is
             return txt, var_counter, lit_counter, func_counter
-
-        # 5) Otherwise treat as variable (obfuscate)
+        
         if txt not in var_map:
             var_map[txt] = f"var{var_counter}"
             var_counter += 1
         return var_map[txt], var_counter, lit_counter, func_counter
-
-    # fallback unchanged
     return txt, var_counter, lit_counter, func_counter
 
-# ==========================================================
-# Functions for calculating Pairwise Distance 
-# ==========================================================
 def calculate_all_pairwise_distances(tokens: List[Dict[str, Any]]) -> Tuple[
         List[Dict[str, Any]], Dict[str, str], Dict[str, str], Dict[str, str], List[str]]:
     results = []
     var_map, lit_map, func_map = {}, {}, {}
     var_counter = lit_counter = func_counter = 0
 
-    # --- PASS A: collect declared functions and detect stream-like identifiers
     declared_funcs = set()
     stream_candidates = set()
     tok_texts = [t['text'].strip() for t in tokens]
 
-    # Detect declared functions from AST parent types
     for t in tokens:
         node = t.get('nodes', [None])[0]
         if node is None:
@@ -290,27 +275,21 @@ def calculate_all_pairwise_distances(tokens: List[Dict[str, Any]]) -> Tuple[
             if ptype in ("function_declarator", "function_definition"):
                 declared_funcs.add(t['text'].strip())
 
-    # Detect patterns for stream-objects: identifier adjacent to << or >>
     for i, txt in enumerate(tok_texts):
         if txt in ("<<", ">>"):
-            # left neighbor
             if i-1 >= 0:
                 left = tok_texts[i-1]
-                # crude heuristic: if left looks like an identifier (letters, underscores)
                 if re.match(r'^[A-Za-z_]\w*$', left):
                     stream_candidates.add(left)
-            # right neighbor
             if i+1 < len(tok_texts):
                 right = tok_texts[i+1]
                 if re.match(r'^[A-Za-z_]\w*$', right):
                     stream_candidates.add(right)
 
-    # Also detect "using namespace std" pattern to keep std as namespace
     for i in range(len(tok_texts)-2):
         if tok_texts[i] == "using" and tok_texts[i+1] == "namespace" and tok_texts[i+2] == "std":
             stream_candidates.add("std")
 
-    # --- PASS B: obfuscate tokens using declared_funcs and stream_candidates
     obfuscated = []
     for t in tokens:
         obf, var_counter, lit_counter, func_counter = obfuscate_token_text(
@@ -320,7 +299,6 @@ def calculate_all_pairwise_distances(tokens: List[Dict[str, Any]]) -> Tuple[
         )
         obfuscated.append(obf)
 
-    # --- Pairwise distance computation (unchanged)
     for i, a in enumerate(tokens):
         for j, b in enumerate(tokens[i:], start=i):
             rep_a, rep_b = a['rep_node'], b['rep_node']
@@ -333,114 +311,43 @@ def calculate_all_pairwise_distances(tokens: List[Dict[str, Any]]) -> Tuple[
             A_obf = obfuscated[i]
             B_obf = obfuscated[j]
             results.append({
-                'A_raw': a['text'].strip(),
-                'B_raw': b['text'].strip(),
-                'A_obf': A_obf,
-                'B_obf': B_obf,
-                'LCA_Type': lca.type if lca else 'N/A',
+                'A_text': a['text'].strip(),
+                'B_text': b['text'].strip(),
+                'A_pos':  (a['start'], a['end']),
+                'B_pos':  (b['start'], b['end']),
                 'Distance': dist
             })
 
     return results, var_map, lit_map, func_map, obfuscated
 
-# ==========================================================
-# Driver Function
-# ==========================================================
-def main_worker(code_string: str, is_cpp: bool):
-    try:
-        parser = make_parser(is_cpp)
-        code_bytes = code_string.encode('utf8')
-        tree = parser.parse(code_bytes)
-        root = tree.root_node
-
-        leaves = collect_leaf_nodes(root, code_bytes)
-        merged_tokens = build_and_merge_tokens(leaves, code_bytes)
-        results, var_map, lit_map, func_map, obf_tokens = calculate_all_pairwise_distances(merged_tokens)
-
-        return {
-            'Code': code_string.replace('\n', '\\n'),
-            'Obfuscated_Tokens': json.dumps(obf_tokens),
-            'Variable_Map': json.dumps(var_map),
-            'Literal_Map': json.dumps(lit_map),
-            'Function_Map': json.dumps(func_map)
-        }
-    except Exception as e:
-        print("Error:", e)
-        return None
-
-# ==========================================================
-# Utils
-# ==========================================================
-def write_to_csv(data, out_path):
-    with open(out_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=['Code', 'Obfuscated_Tokens', 'Variable_Map', 'Literal_Map', 'Function_Map'])
-        writer.writeheader()
-        writer.writerows(data)
-
-def remove_escape_characters(code: str) -> str:
-    code = unicodedata.normalize("NFKC", code)
-
-    try:
-        code = bytes(code, "utf-8").decode("unicode_escape")
-    except Exception:
-        code = code.encode("utf-8", "ignore").decode("unicode_escape", "ignore")
-
-    code = re.sub(r"\\[ntr]", lambda m: {"\\n": "\n", "\\t": "\t", "\\r": "\r"}[m.group(0)], code)
-    code = "".join(ch for ch in code if ch.isprintable() or ch in "\n\t")
-
-    code = re.sub(r"//.*?(?=\n|$)", "", code)                 # single-line //
-    code = re.sub(r"/\*.*?\*/", "", code, flags=re.DOTALL)    # multi-line /* ... */
-    code = re.sub(r"\n{3,}", "\n\n", code)
-    code = code.replace("\ufeff", "").replace("\u200b", "")
-
-    return code.strip()
-
-def print_tree(node: Node, code_bytes: bytes, indent: int = 0):
-    prefix = "  " * indent
-    text = code_bytes[node.start_byte:node.end_byte].decode("utf8", errors="ignore")
-    print(f"{prefix}{node.type}: '{text}' [{node.start_byte}, {node.end_byte}]")
-    for child in node.children:
-        print_tree(child, code_bytes, indent + 1)
-
-
-# -------------------------------------------------------------
-# Driver Code
-# -------------------------------------------------------------
 if __name__ == "__main__":
-    is_cpp = True  # or False for C, your choice
-
+    is_cpp = True
     parser = make_parser(is_cpp)
 
-    with open("unpaired_cpp.txt") as f:   # or any input file
-        code_string = f.read()
+    file_path = "unpaired_cpp.txt"
 
-    code_bytes = code_string.encode("utf8")
-    tree = parser.parse(code_bytes)
-    root = tree.root_node
+    with open(file_path, "r", encoding="utf-8") as f:
+        all_lines = f.readlines()
+    
+    for line in all_lines:
+        clean_line = clean_code(line)
+        print(clean_line)
 
-    print_tree(root, code_bytes)
+        clean_line_bytes = clean_line.encode("utf8")
+        tree = parser.parse(clean_line_bytes)
+        root = tree.root_node
 
+        print_tree(root, clean_line_bytes)
 
-# if __name__ == "__main__":
-#     is_cpp = True if len(sys.argv) > 1 and sys.argv[1] == "cpp" else False
-#     input_file = "unpaired_cpp.txt" if is_cpp else "unpaired_c.txt"
-#     out_file = "cpp_tokens.csv" if is_cpp else "c_tokens.csv"
+        leaves = collect_leaf_nodes(root, clean_line_bytes)
+        merged_tokens = build_and_merge_tokens(leaves, clean_line_bytes)
+        results, var_map, lit_map, func_map, obf_tokens = calculate_all_pairwise_distances(merged_tokens)
 
-#     if not os.path.exists(input_file):
-#         print(f"Input file '{input_file}' not found.")
-#         sys.exit(1)
+        for r in results:
+            A = r['A_text']
+            B = r['B_text']
+            A_s, A_e = r['A_pos']
+            B_s, B_e = r['B_pos']
+            dist = r['Distance']
 
-#     with open(input_file) as f:
-#         snippets = [remove_escape_characters(line.strip()) for line in f if line.strip()]
-
-#     from concurrent.futures import ProcessPoolExecutor, as_completed
-#     all_results = []
-#     with ProcessPoolExecutor(max_workers=max(1, os.cpu_count() - 1)) as ex:
-#         futures = [ex.submit(main_worker, s, is_cpp) for s in snippets]
-#         for fut in as_completed(futures):
-#             r = fut.result()
-#             if r:
-#                 all_results.append(r)
-
-#     write_to_csv(all_results, out_file)
-#     print(f"Wrote {len(all_results)} entries to {out_file}")
+            print(f"({A}, {B}) ([{A_s} {A_e}], [{B_s} {B_e}]) {dist}")

@@ -9,7 +9,7 @@
 ## Table of Contents
 
 - [Ditto](#Ditto)
-  - [Table of Contents](#table-of-contents)
+  - [To ](#to-do-list)
   - [Introduction](#introduction)
   - [Methodology](#methodology)
       - [Data Collection](#data-collection)
