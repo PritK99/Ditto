@@ -1,3 +1,7 @@
+"""
+This script takes the analyzed tokens (c_tokens_analyzed.csv and cpp_tokens_analyzed.csv) and converts them to cleaned tokens (c_cleaned_tokens.csv and cpp_cleaned_tokens.csv).
+Analysis eliminates the code lines which are too lengthy.
+"""
 import os
 import ast
 from tqdm import tqdm

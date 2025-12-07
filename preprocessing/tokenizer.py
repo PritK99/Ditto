@@ -1,8 +1,12 @@
-from clang.cindex import Config, Index, TokenKind, CursorKind
-import tempfile
+"""
+This file acts as util for lexer.py
+"""
 import os
+import tempfile
+from clang.cindex import Config, Index, TokenKind, CursorKind
 
-# Path to libclang.so
+# Path to libclang.so file
+# Please follow instructions in README to install libclang and set the path
 Config.set_library_file("/usr/lib/llvm-18/lib/libclang.so")
 
 # Special cases
@@ -26,19 +30,19 @@ KEYWORDS = [
     "try", "typedef", "typeid", "typename", "union",
     "unsigned", "using", "virtual", "void", "volatile",
     "wchar_t", "while", "xor", "xor_eq",
-    # C-only keywords
     "_Bool", "_Complex", "_Imaginary", "restrict"
 ]
 
 def obfuscate_and_tokenize(code_text, is_cpp = False):
     """
-    Transform C code text into mapped tokens.
+    Transform C code text into obfuscated tokens.
 
     Args:
         code_text (str): Raw C code as a string.
 
     Returns:
-        tuple: (transformed_code, var_dict, func_dict, lit_dict)
+        transformed_tokens: Obfuscated tokens
+        var_dict, func_dict, lit_dict, struct_dict, class_dict (dict): All obfuscation dictionaries
     """
 
     # Write code to temporary file for clang parsing
@@ -277,7 +281,6 @@ def obfuscate_and_tokenize(code_text, is_cpp = False):
         i += 1
 
     return transformed_tokens, var_dict, func_dict, lit_dict, struct_dict, class_dict
-
 
 # Example usage
 if __name__ == "__main__":

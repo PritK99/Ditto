@@ -34,6 +34,26 @@ The methodology comprises of 3 major sections: Data Collection, Preprocessing, a
 
 ## Getting Started
 
+### Installations
+
+Preprocessor requires installing clang, libclang (for lexer) and tree-sitter (for parser)
+
+#### Installation for clang and libclang
+
+Make sure that all the requirements in `requirements.txt` are installed
+
+`sudo apt-get install clang`
+
+`sudo apt-get install libclang-dev`
+
+`sudo apt install libclang-dev python3-clang`
+
+You will also need to change the path in `set_library_file()` in `tokenization.py` to point to `libclang.co`. The below command will return the path to `libclang.co`
+
+``find /usr/lib -name "libclang.so*" 2>/dev/null`
+
+For example, `/usr/lib/llvm-18/lib/libclang.so`
+
 ### Data
 
 Link to the preprocessed data can be found <a href="">here</a>. 

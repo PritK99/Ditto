@@ -1,3 +1,6 @@
+"""
+This script takes the raw data files (unpaired_c.txt and unpaired_cpp.txt) and converts them to obfuscted tokens (c_tokens.csv and cpp_tokens.csv)
+"""
 import re
 import sys
 import subprocess
@@ -10,7 +13,6 @@ from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 from tokenizer import obfuscate_and_tokenize  
 
-# ---------------------- Logging Setup ----------------------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -18,7 +20,6 @@ logging.basicConfig(
     filemode="w"
 )
 
-# ---------------------- Utility Functions ----------------------
 def separate_includes_and_code_from_text(code_text):
     include_pattern = re.compile(r'^\s*#\s*include\s+[<"].+[>"].*$', re.MULTILINE)
     includes = "\n".join(include_pattern.findall(code_text)).strip()
@@ -56,12 +57,7 @@ def safe_clean_code(line):
     line = line.replace("\\n", "\n").replace("\\t", "\t")
     return line
 
-# ---------------------- Worker Function (runs in each process) ----------------------
 def process_single_line(args):
-    """
-    Runs in parallel workers.
-    Returns None or a tuple that the master process writes to CSV.
-    """
     i, raw_line, is_cpp = args
 
     try:
@@ -95,8 +91,7 @@ def process_single_line(args):
         print(line)
         logging.info(f"Error processing code {i+1}: {e}")
         return None
-
-# ---------------------- Main Parallel Processing Function ----------------------
+    
 def process_txt_file_parallel(input_path, output_csv="output.csv", workers=None):
     is_cpp = "_cpp" in input_path.lower()
 
@@ -105,11 +100,9 @@ def process_txt_file_parallel(input_path, output_csv="output.csv", workers=None)
 
     logging.info(f"Using {workers} worker processes.")
 
-    # Load the input file lines (cheap: only 200k short strings)
     with open(input_path, "r", encoding="utf-8", errors="ignore") as f:
         lines = f.readlines()
 
-    # CSV Setup
     fieldnames = [
         "line_number",
         "transformed_tokens",
@@ -124,11 +117,9 @@ def process_txt_file_parallel(input_path, output_csv="output.csv", workers=None)
     writer = csv.DictWriter(out, fieldnames=fieldnames)
     writer.writeheader()
 
-    # Prepare multiprocessing
     pool = Pool(processes=workers)
     tasks = ((i, line, is_cpp) for i, line in enumerate(lines))
 
-    # imap preserves order, so index stays correct
     for result in tqdm(pool.imap(process_single_line, tasks),
                        total=len(lines), desc="Processing", unit="line"):
         if result is None:

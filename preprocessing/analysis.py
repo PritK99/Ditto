@@ -1,3 +1,7 @@
+"""
+This script takes the obfuscted tokens (c_tokens.csv and cpp_tokens.csv) and converts them to analyzed tokens (c_tokens_analyzed.csv and cpp_tokens_analyzed.csv).
+Analysis eliminates the code lines which are too lengthy.
+"""
 import pandas as pd
 import ast
 from collections import Counter, defaultdict

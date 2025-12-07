@@ -1,8 +1,11 @@
+"""
+This script takes code and converts it to distance matrix obtained from AST after parsing.
+"""
 import re
 import ast
 import ctypes
 import os
-import csv
+import math
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -172,6 +175,7 @@ def build_and_merge_tokens(leaf_nodes: List[Node], code_bytes: bytes) -> List[Di
         i += 1
     return merged
 
+# This function computes the entire distance matrix
 def calculate_all_pairwise_distances(tokens: List[Dict[str, Any]]):
     dist_matrix = np.zeros((len(tokens), len(tokens)), dtype=int)
 
@@ -190,12 +194,40 @@ def calculate_all_pairwise_distances(tokens: List[Dict[str, Any]]):
 
     return dist_matrix
 
-def reconstruct_full_matrix(triu_vector, num_tokens):
-    mat = np.zeros((num_tokens, num_tokens), dtype=int)
-    triu_indices = np.triu_indices(num_tokens)
-    mat[triu_indices] = triu_vector
-    mat = mat + np.triu(mat, 1).T  
-    return mat
+# This function only computes triu
+def calculate_triu_pairwise_distances(tokens):
+    triu = []
+
+    n = len(tokens)
+    for i in range(n):
+        a = tokens[i]
+        rep_a = a['rep_node']
+
+        for j in range(i, n):
+            b = tokens[j]
+            rep_b = b['rep_node']
+
+            if rep_a == rep_b:
+                dist = 0
+            else:
+                lca, dist = calculate_tree_distance_nodes(rep_a, rep_b)
+
+            triu.append(dist)
+
+    return triu
+
+# Given a pair of token indexes i and j, this function returns its distance using triu
+def get_dist_from_triu(i, j, triu):
+    m = len(triu)
+    n = int((math.isqrt(8*m + 1) - 1) // 2)    # This is formula for directly obtaining matrix[i][j] from triu
+
+    r = min(i, j)
+    c = max(i, j)
+
+    offset = r * n - (r * (r - 1)) // 2
+    idx = offset + (c - r)
+
+    return triu[idx]
 
 if __name__ == "__main__":
     is_cpp = True
@@ -205,26 +237,36 @@ if __name__ == "__main__":
     tokens = list(df["transformed_tokens"])
     line_numbers = list(df["line_number"])
 
-    dist_dict = {}
+    # take first half of C data (~55K), because C++ data only has ~50K rows
+    half_len = len(tokens) // 2
+    tokens = tokens[:half_len]
 
-    for line_number, token in tqdm(zip(line_numbers, tokens), total=len(tokens)):
-        code_tokens = ast.literal_eval(token)
-        code = " ".join(code_tokens)
-        clean_line = clean_code(code)
-        clean_line_bytes = clean_line.encode("utf8")
-        tree = parser.parse(clean_line_bytes)
-        root = tree.root_node
+    out_filename = "lca_triu_values_c.txt"
+    with open(out_filename, "w", encoding="utf8") as f:
+        for i in tqdm(range(len(tokens))):
 
-        print_tree(root, clean_line_bytes)
+            code_tokens = tokens[i]    
+            code_tokens = ast.literal_eval(code_tokens)
+            code = " ".join(code_tokens)
+            clean_line = clean_code(code)
+            clean_line_bytes = clean_line.encode("utf8")
+            tree = parser.parse(clean_line_bytes)
+            root = tree.root_node
 
-        leaves = collect_leaf_nodes(root, clean_line_bytes)
-        merged_tokens = build_and_merge_tokens(leaves, clean_line_bytes)
-        dist_matrix = calculate_all_pairwise_distances(merged_tokens)
-        
-        print(code_tokens)
-        print(dist_matrix[0, :])
+            # print_tree(root, clean_line_bytes)
 
-        triu_indices = np.triu_indices(len(dist_matrix))
-        dist_vector = dist_matrix[triu_indices]
+            leaves = collect_leaf_nodes(root, clean_line_bytes)
+            merged_tokens = build_and_merge_tokens(leaves, clean_line_bytes)
+            # dist_matrix = calculate_all_pairwise_distances(merged_tokens)
+            triu = calculate_triu_pairwise_distances(merged_tokens)
 
-        dist_dict[line_number] = dist_vector
+            # test_indices_i = [0, 1, int(len(code_tokens)/2)] 
+            # test_indices_j = [0, 1, int(len(code_tokens)/2)]
+
+            # for i in test_indices_i:
+            #     for j in test_indices_j:
+            #         if (dist_matrix[i][j] != get_dist_from_triu(i, j, triu)):
+            #             print("Incorrect logic for triu evaluations")
+            # break
+
+            f.write(" ".join(map(str, triu)) + "\n")
