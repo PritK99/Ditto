@@ -20,17 +20,36 @@
 
 ## Introduction
 
-Ditto is a transpiler that converts code between C++ and C languages. The name comes from the Pokémon Ditto, which can copy any other Pokémon exactly. Our goal is to build an AI transpiler that can translate code across different programming paradigms, no matter the language. For our project, we focus on C++ to C conversion and vice versa. Through this project, we aim to explore 2 hypotheses:
+Transpilers are system that convert code from one programming language to another. Ditto is a transpiler that converts code between C++ and C languages. The name comes from the Pokémon Ditto, which can copy any other Pokémon exactly. Our goal is to build an AI transpiler that can translate code across different programming paradigms, no matter the language. 
 
-1) Can we build an AI system that is able to transpile code across programming paradigms? (For example, C → C++)
+<p align="center">
+  <img src="./assets/img/transpiler.png" alt="transpiler">
+</p>
 
-2) Can we integrate compiler domain knowledge to improve the performance of deep learning models?
+
+For our project, we focus on C++ to C conversion and vice versa. Through this project, we aim to explore 2 hypotheses:
+
+1) Can we build an AI system that is able to transpile code across programming paradigms? (For example, C → C++ and vice versa)
+
+2) Can we integrate compiler domain knowledge to improve the performance of deep learning models? 
+
+Specifically, we try to use the Abstract Syntax Tree given by parser to define the distance between any two tokens, and use that distance for calculating positional embeddings? We believe that by adding more domain knowledge to the model, we can reduce its dependence on data and see some improvements such as faster convergence, better performance etc.
+
+<p align="center">
+  <img src="./assets/img/ast.png" alt="ast">
+  <br>
+  <small><i>Image source: https://ruslanspivak.com/lsbasi-part7/</i></small>
+</p>
+
+Consider the example expression `2*7+3`. If we look at this expression as a string, the distance between 7 and 3 is 1 token. However, from the AST perspective, they are 2 token apart from each other. Our hypothesis is that AST can be used as positional embedding and it will be a better representative of distances than normal techniques.
+
+
 
 ## Demo
 
 ## Methodology
 
-The methodology comprises of 3 major sections: Data Collection, Preprocessing, and Model Architecture. For detailed information on each stage, please refer to the `README.md` file in the respective directory.
+The methodology comprises of 3 major sections: Data Collection, Preprocessing, and Model Architecture. For detailed information on each stage, please refer to the `README.md` files in the respective directory.
 
 ## Getting Started
 
@@ -50,13 +69,13 @@ Make sure that all the requirements in `requirements.txt` are installed
 
 You will also need to change the path in `set_library_file()` in `tokenization.py` to point to `libclang.co`. The below command will return the path to `libclang.co`
 
-``find /usr/lib -name "libclang.so*" 2>/dev/null`
+`find /usr/lib -name "libclang.so*" 2>/dev/null`
 
 For example, `/usr/lib/llvm-18/lib/libclang.so`
 
 ### Data
 
-Link to the preprocessed data can be found <a href="">here</a>. 
+Link to the final data can be found <a href="https://iiithydresearch-my.sharepoint.com/:f:/g/personal/prit_kanadiya_research_iiit_ac_in/IgAR9lw8HyPETLpzUu7I1G_jAUhxaU9ng8d3bSwhgZ_NzbI?e=HIzkt0">here</a>. 
 
 **Note:** The dataset provided above has been obtained after several preprocessing steps. To access the raw data files, intermediate output files, or logs, click <a href="https://iiithydresearch-my.sharepoint.com/:f:/g/personal/prit_kanadiya_research_iiit_ac_in/IgDP3mtf5hr1RIuOD9ePrzljAZbwoiaikGDwoTUWWTzUiDE?e=EWenOJ">here</a>.
 

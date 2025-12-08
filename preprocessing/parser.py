@@ -195,6 +195,8 @@ def calculate_all_pairwise_distances(tokens: List[Dict[str, Any]]):
     return dist_matrix
 
 # This function only computes triu
+# We can work with triu because we know our matrix is symmetric i.e. O(n^2) -> O(((n)*(n+1)/2)) in terms of memory
+# Further, we can optimize it as the diagonal entries are always 0 i.e. O(((n)*(n+1)/2)) -> O(((n)*(n-1)/2)) in terms of memory
 def calculate_triu_pairwise_distances(tokens):
     triu = []
 
@@ -203,7 +205,7 @@ def calculate_triu_pairwise_distances(tokens):
         a = tokens[i]
         rep_a = a['rep_node']
 
-        for j in range(i, n):
+        for j in range(i+1, n):
             b = tokens[j]
             rep_b = b['rep_node']
 
@@ -218,55 +220,97 @@ def calculate_triu_pairwise_distances(tokens):
 
 # Given a pair of token indexes i and j, this function returns its distance using triu
 def get_dist_from_triu(i, j, triu):
-    m = len(triu)
-    n = int((math.isqrt(8*m + 1) - 1) // 2)    # This is formula for directly obtaining matrix[i][j] from triu
+    # Base Case
+    if (i == j):
+        return 0    
 
-    r = min(i, j)
-    c = max(i, j)
+    if i > j:
+        i, j = j, i    # Only using the upper triangular matrix
 
-    offset = r * n - (r * (r - 1)) // 2
-    idx = offset + (c - r)
+    num_tokens = int((1 + math.isqrt(1 + 8*len(triu))) // 2)    # This is formula for num_tokens from triu length
+
+    idx = (i * (2*num_tokens - i - 1)) // 2 + (j - i - 1)
 
     return triu[idx]
 
 if __name__ == "__main__":
     is_cpp = True
+    base_str = "cpp" if is_cpp else "c"
     parser = make_parser(is_cpp)
 
-    df = pd.read_csv("../data/c_cleaned_tokens.csv")
-    tokens = list(df["transformed_tokens"])
-    line_numbers = list(df["line_number"])
+    input_file = f"../data/{base_str}_cleaned_tokens.csv"
+    output_file = f"../data/{base_str}_tokens_with_lca_dist.csv"
 
-    # take first half of C data (~55K), because C++ data only has ~50K rows
-    half_len = len(tokens) // 2
-    tokens = tokens[:half_len]
+    cols = ["line_number", "transformed_tokens", "var_dict", "func_dict", "lit_dict", "struct_dict", "class_dict", "dist"]
 
-    out_filename = "lca_triu_values_c.txt"
-    with open(out_filename, "w", encoding="utf8") as f:
-        for i in tqdm(range(len(tokens))):
+    pd.DataFrame(columns=cols).to_csv(
+        output_file, index=False
+    )
 
-            code_tokens = tokens[i]    
-            code_tokens = ast.literal_eval(code_tokens)
-            code = " ".join(code_tokens)
-            clean_line = clean_code(code)
-            clean_line_bytes = clean_line.encode("utf8")
-            tree = parser.parse(clean_line_bytes)
-            root = tree.root_node
+    # Reading and writing each row at a time because the resultant df has a size of ~15GBs 
+    for chunk in tqdm(pd.read_csv(input_file, chunksize=1), total=60000):    # The tqdm used here is dummy and just for viewing progress  
+        row = chunk.iloc[0]
+        code_tokens = ast.literal_eval(row["transformed_tokens"])
 
-            # print_tree(root, clean_line_bytes)
+        code = " ".join(code_tokens)
+        clean_line = clean_code(code)
+        clean_line_bytes = clean_line.encode("utf8")
+        tree = parser.parse(clean_line_bytes)
+        root = tree.root_node
 
-            leaves = collect_leaf_nodes(root, clean_line_bytes)
-            merged_tokens = build_and_merge_tokens(leaves, clean_line_bytes)
-            # dist_matrix = calculate_all_pairwise_distances(merged_tokens)
-            triu = calculate_triu_pairwise_distances(merged_tokens)
+        leaves = collect_leaf_nodes(root, clean_line_bytes)
+        merged_tokens = build_and_merge_tokens(leaves, clean_line_bytes)
+        triu = calculate_triu_pairwise_distances(merged_tokens)
 
-            # test_indices_i = [0, 1, int(len(code_tokens)/2)] 
-            # test_indices_j = [0, 1, int(len(code_tokens)/2)]
+        chunk["dist"] = str(triu)
 
-            # for i in test_indices_i:
-            #     for j in test_indices_j:
-            #         if (dist_matrix[i][j] != get_dist_from_triu(i, j, triu)):
-            #             print("Incorrect logic for triu evaluations")
-            # break
+        chunk.to_csv(output_file, mode="a", header=False, index=False)
 
-            f.write(" ".join(map(str, triu)) + "\n")
+# RAM crashes if we use the below appraoch as it has to keep entire df in memory
+# if __name__ == "__main__":
+#     is_cpp = True
+#     base_str = "cpp" if is_cpp else "c"
+#     parser = make_parser(is_cpp)
+
+#     df = pd.read_csv(f"../data/{base_str}_cleaned_tokens.csv")
+#     df["dist"] = None
+#     tokens = list(df["transformed_tokens"])
+#     line_numbers = list(df["line_number"])
+
+#     # take first half of C data (~55K), because C++ data only has ~50K rows
+#     if not (is_cpp):
+#         half_len = len(tokens) // 2
+#         tokens = tokens[:half_len]
+
+#     # out_filename = f"../data/lca_triu_values_{base_str}.txt"
+#     # with open(out_filename, "w", encoding="utf8") as f:
+#     for i in tqdm(range(len(tokens))):
+
+#         code_tokens = tokens[i]    
+#         code_tokens = ast.literal_eval(code_tokens)
+#         code = " ".join(code_tokens)
+#         clean_line = clean_code(code)
+#         clean_line_bytes = clean_line.encode("utf8")
+#         tree = parser.parse(clean_line_bytes)
+#         root = tree.root_node
+
+#         # print_tree(root, clean_line_bytes)
+
+#         leaves = collect_leaf_nodes(root, clean_line_bytes)
+#         merged_tokens = build_and_merge_tokens(leaves, clean_line_bytes)
+#         triu = calculate_triu_pairwise_distances(merged_tokens)
+#         # dist_matrix = calculate_all_pairwise_distances(merged_tokens)
+        
+#         # test_indices_i = [0, 1, int(len(code_tokens)/2)] 
+#         # test_indices_j = [0, 1, int(len(code_tokens)/2)]
+
+#         # for i in test_indices_i:
+#         #     for j in test_indices_j:
+#         #         if (dist_matrix[i][j] != get_dist_from_triu(i, j, triu)):
+#         #             print("Incorrect logic for triu evaluations")
+#         # break
+
+#         df.at[i, "dist"] = str(triu)
+#         # f.write(" ".join(map(str, triu)) + "\n")
+    
+#     df.to_csv(f"../data/{base_str}_tokens_with_lca_dist.csv", index=False)
