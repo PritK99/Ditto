@@ -1,10 +1,9 @@
-# data
-final_data
-*data
-*raw_data
+# Venv
+/ditto
 
-# venv
-ditto
+# Data
+/data
+*.csv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

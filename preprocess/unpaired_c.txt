@@ -1,1 +1,0 @@
-#include <stdio.h>\n using namespace std; bool conquer_gujarat(bool is_2070){if(is_2070==1){printf("%s", "Yayy"); return true;}else{return true; // We will conquer anyways\n}}int main(){int a=5;return a;}

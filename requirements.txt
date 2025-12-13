@@ -5,3 +5,5 @@ requests
 selenium 
 webdriver-manager
 pandas
+torch
+pyarrow
