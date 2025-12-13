@@ -1,77 +1,46 @@
-import csv
-import ast
 import torch
-import numpy as np
-import pandas as pd
-from config import Config
-from torch.utils.data import Dataset, DataLoader
+from config import Config  
+import pyarrow.parquet as pq
+from torch.utils.data import Dataset
 
 class TranspilerDataset(Dataset):
-    def __init__(self, c_data_path: str, cpp_data_path: str, vocab_path: str, max_seq_len: int = 1000, use_lca_distance: bool = False, mode: str = "train", val_ratio: float = 0.05, test_ratio: float = 0.05, verbose = False):
+    def __init__(self, c_data_path, cpp_data_path, vocab_path, max_seq_len=1000, use_lca_distance=False, mode="train", val_ratio=0.05, test_ratio=0.05, verbose=False):
         super().__init__()
         self.mode = mode
         self.max_seq_len = max_seq_len
         self.use_lca_distance = use_lca_distance
-        self.c_data_path = c_data_path
-        self.cpp_data_path = cpp_data_path
-        self.header = None
 
-        # Calculating length of c_data and cpp_data by reading chunks 
-        # This is because we can not load the complete dataset at once
-        c_len = 0
-        cpp_len = 0
+        self.c_file = pq.ParquetFile(c_data_path)
+        self.cpp_file = pq.ParquetFile(cpp_data_path)
 
-        chunksize = 1000
-        for chunk in pd.read_csv(c_data_path, chunksize=chunksize):
-            c_len += len(chunk)
-        for chunk in pd.read_csv(cpp_data_path, chunksize=chunksize):
-            cpp_len += len(chunk)
+        self.c_len = self.c_file.metadata.num_rows
+        self.cpp_len = self.cpp_file.metadata.num_rows
+        self.dataset_len = min(self.c_len, self.cpp_len)    # We need to make both datasets of same size
 
-        if (verbose):
-            print(f"Original length of C data: {c_len}", flush = False)
-            print(f"Original length of C++ data: {cpp_len}", flush = False)
-        
-        # We need to make both datasets of same size
-        self.dataset_len = min(c_len, cpp_len)
-        if (verbose):
+        if verbose:
+            print(f"Original length of C data: {self.c_len}", flush = False)
+            print(f"Original length of C++ data: {self.cpp_len}", flush = False)
             print(f"Transpiler dataset length: {self.dataset_len}", flush = False)
 
-        # Calculating split indexes for val and test
-        self.val_start = int((1 - val_ratio - test_ratio)*self.dataset_len)    # val_start will also act as train_end
-        self.test_start = int((1 - test_ratio)*self.dataset_len)    # test_start will also act as test_end
+        self.val_start = int((1 - val_ratio - test_ratio) * self.dataset_len)
+        self.test_start = int((1 - test_ratio) * self.dataset_len)
 
-        if (verbose):
+        if verbose:
             print(f"Train data length: {self.val_start}", flush = False)
             print(f"Validation data length: {self.test_start - self.val_start}", flush = False)
             print(f"Train data length: {self.dataset_len - self.test_start}", flush = False)
-        
-        # Computing offsets for easy access later
-        self.c_offsets = self.build_offsets(c_data_path)
-        self.cpp_offsets = self.build_offsets(cpp_data_path)
 
         # Creating vocabulary and token_to_idx and idx_to_token dictionary
         self.token_to_idx, self.idx_to_token = self.build_vocab(vocab_path)
-    
-    def build_offsets(self, file_path):
-        offsets = []
-        offset = 0
-        with open(file_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                offsets.append(offset)
-                offset += len(line.encode('utf-8'))
-        return offsets
 
     def build_vocab(self, vocab_path):
         token_to_idx = {}
         idx_to_token = {}
-
-        special_tokens = ["[PAD]", "[UNK]", "[SOS]", "[EOS]"]    # Reserving indices for special tokens 
-
+        special_tokens = ["[PAD]", "[UNK]", "[SOS]", "[EOS]"]
         for i, tok in enumerate(special_tokens):
             token_to_idx[tok] = i
             idx_to_token[i] = tok
         idx = len(special_tokens)
-
         with open(vocab_path, 'r', encoding='utf-8') as f:
             for line in f:
                 tok = line.strip()
@@ -80,87 +49,67 @@ class TranspilerDataset(Dataset):
                 token_to_idx[tok] = idx
                 idx_to_token[idx] = tok
                 idx += 1
-
         return token_to_idx, idx_to_token
-    
+
+    def get_vanilla_relative_bias_triu(self, n):
+        return [j - i for i in range(n) for j in range(i+1, n)]
+
     def __len__(self):
         return self.dataset_len
-    
-    def get_vanilla_relative_bias_triu(self, n: int):
-        triu = []
-        for i in range(n):
-            for j in range(i+1, n):
-                triu.append(j - i)
-
-        return triu
 
     def __getitem__(self, index):
-        if (self.header == None):
-            with open(self.c_data_path, 'r', encoding='utf-8') as f:
-                self.header = f.readline().strip().split(",")
+        if self.mode == "train":
+            idx = index
+        elif self.mode == "val":
+            idx = self.val_start + index
+        else: 
+            idx = self.test_start + index
 
-        if (self.mode == "train"):
-            offset = index + 1    # Because we use linecache, we need to add 1 to skip header 
-        elif (self.mode == "val"):
-            offset = self.val_start + index + 1  
-        elif (self.mode == "test"):
-            offset = self.test_start + index + 1 
-        
-        with open(self.c_data_path, 'r', encoding='utf-8') as f:
-            f.seek(self.c_offsets[offset])
-            c_line = f.readline().strip()
+        c_row_group, c_local_idx = divmod(idx, self.c_file.metadata.row_group(0).num_rows)
+        cpp_row_group, cpp_local_idx = divmod(idx, self.cpp_file.metadata.row_group(0).num_rows)
 
-        with open(self.cpp_data_path, 'r', encoding='utf-8') as f:
-            f.seek(self.cpp_offsets[offset])
-            cpp_line = f.readline().strip()
+        c_row = self.c_file.read_row_group(c_row_group, columns=["transformed_tokens","dist"]).to_pandas().iloc[c_local_idx]
+        cpp_row = self.cpp_file.read_row_group(cpp_row_group, columns=["transformed_tokens","dist"]).to_pandas().iloc[cpp_local_idx]
 
-        c_row = next(csv.reader([c_line]))
-        cpp_row = next(csv.reader([cpp_line]))
+        c_tokens = c_row["transformed_tokens"]
+        cpp_tokens = cpp_row["transformed_tokens"]
 
-        # Extracting all required columns from row
-        # Note that for training we do not require obfuscation dictionaries
-        # These dictionaries will only be used for inference in real time to provide accuracte output
-        c_tokens = ast.literal_eval(c_row[1])
-        # c_var_dict = ast.literal_eval(c_row[2])
-        # c_func_dict = ast.literal_eval(c_row[3])
-        # c_lit_dict = ast.literal_eval(c_row[4])
-        # c_struct_dict = ast.literal_eval(c_row[5])
-        # c_class_dict = ast.literal_eval(c_row[6])
+        if self.use_lca_distance:
+            c_dist = c_row["dist"]
+            cpp_dist = cpp_row["dist"]
+        else:    # This is the baseline approach
+            c_dist = self.get_vanilla_relative_bias_triu(len(c_tokens))
+            cpp_dist = self.get_vanilla_relative_bias_triu(len(cpp_tokens))
 
-        if (self.use_lca_distance):
-            c_dist_vector = ast.literal_eval(c_row[7])
-        else:
-            c_dist_vector = self.get_vanilla_relative_bias_triu(len(c_tokens))
+        def pad_seq(tokens, max_len):
+            # The sequence length is max length + 2 as we need [SOS] and [EOS] as well
+            num_pad = max_len - len(tokens)
+            return [self.token_to_idx["[SOS]"]] + [self.token_to_idx.get(t, self.token_to_idx["[UNK]"]) for t in tokens] + [self.token_to_idx["[PAD]"]] * num_pad + [self.token_to_idx["[EOS]"]]
 
-        cpp_tokens = ast.literal_eval(cpp_row[1])
-        # cpp_var_dict = ast.literal_eval(cpp_row[2])
-        # cpp_func_dict = ast.literal_eval(cpp_row[3])
-        # cpp_lit_dict = ast.literal_eval(cpp_row[4])
-        # cpp_struct_dict = ast.literal_eval(cpp_row[5])
-        # cpp_class_dict = ast.literal_eval(cpp_row[6])
+        c_tokens_ids = pad_seq(c_tokens, self.max_seq_len)
+        cpp_tokens_ids = pad_seq(cpp_tokens, self.max_seq_len)
 
-        if (self.use_lca_distance):
-            cpp_dist_vector = ast.literal_eval(cpp_row[7])
-        else:
-            cpp_dist_vector = self.get_vanilla_relative_bias_triu(len(cpp_tokens))
+        c_token_ids = torch.tensor(c_tokens_ids, dtype=torch.long)
+        cpp_token_ids = torch.tensor(cpp_tokens_ids, dtype=torch.long)
+        c_dist = torch.tensor(c_dist, dtype=torch.long)
+        cpp_dist = torch.tensor(cpp_dist, dtype=torch.long)
 
-        c_tokens_ids = [self.token_to_idx[t] for t in c_tokens]
-        cpp_tokens_ids = [self.token_to_idx[t] for t in cpp_tokens]
+        # We also require encoder and decoder masks
+        pad_id = self.token_to_idx["[PAD]"]
+        c_encoder_mask = (c_token_ids != pad_id).long()
+        cpp_encoder_mask = (cpp_token_ids != pad_id).long()
 
-        # For now, we dont consider max_len, PAD, EOS, SOS etc.
-        # Pending
-
-        return torch.tensor(c_tokens_ids, dtype=torch.long), torch.tensor(cpp_tokens_ids, dtype=torch.long), torch.tensor(c_dist_vector, dtype=torch.long), torch.tensor(cpp_dist_vector, dtype=torch.long)
+        return c_token_ids, cpp_token_ids, c_dist, cpp_dist
 
 if __name__ == "__main__":
     config = Config()
 
-    train_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.use_lca_distance, "train", config.val_ratio, config.test_ratio, verbose = True)
-    val_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.use_lca_distance, "val", config.val_ratio, config.test_ratio)
-    test_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.use_lca_distance, "test", config.val_ratio, config.test_ratio)
+    train_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.use_lca_distance, mode="train", val_ratio=config.val_ratio, test_ratio=config.test_ratio, verbose=True)
+    val_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.use_lca_distance, mode="val", val_ratio=config.val_ratio, test_ratio=config.test_ratio)
+    train_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.use_lca_distance, mode="test", val_ratio=config.val_ratio, test_ratio=config.test_ratio)
 
-    c_tokens, cpp_tokens, c_dist_vector, cpp_dist_vector  = train_data.__getitem__(0)
-    print(c_tokens)
-    print(c_dist_vector)
-    print(cpp_tokens)
-    print(cpp_dist_vector)
+    c_token_ids, cpp_token_ids, c_dist, cpp_dist = train_data[110]
+    print("C tokens:", c_token_ids)
+    print("C distance vector:", c_dist)
+    print("C++ tokens:", cpp_token_ids)
+    print("C++ distance vector:", cpp_dist)
