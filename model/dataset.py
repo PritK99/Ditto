@@ -89,17 +89,31 @@ class TranspilerDataset(Dataset):
         c_tokens_ids = pad_seq(c_tokens, self.max_seq_len)
         cpp_tokens_ids = pad_seq(cpp_tokens, self.max_seq_len)
 
-        c_token_ids = torch.tensor(c_tokens_ids, dtype=torch.long)
-        cpp_token_ids = torch.tensor(cpp_tokens_ids, dtype=torch.long)
-        c_dist = torch.tensor(c_dist, dtype=torch.long)
-        cpp_dist = torch.tensor(cpp_dist, dtype=torch.long)
+        c_encoder_token_ids = torch.tensor(c_tokens_ids, dtype=torch.long)
+        cpp_encoder_token_ids = torch.tensor(cpp_tokens_ids, dtype=torch.long)
+        c_encoder_dist = torch.tensor(c_dist, dtype=torch.long)
+        cpp_encoder_dist = torch.tensor(cpp_dist, dtype=torch.long)
 
-        # We also require encoder and decoder masks
+        # We also require masks
         pad_id = self.token_to_idx["[PAD]"]
-        c_encoder_mask = (c_token_ids != pad_id).long()
-        cpp_encoder_mask = (cpp_token_ids != pad_id).long()
+        c_encoder_mask = (c_encoder_token_ids != pad_id).long()
+        cpp_encoder_mask = (cpp_encoder_token_ids != pad_id).long()
 
-        return c_token_ids, cpp_token_ids, c_dist, cpp_dist
+        # The same process has to be repeated for decoder side
+        def shift_right(seq_ids):
+            seq_ids = torch.tensor(seq_ids, dtype=torch.long) if not isinstance(seq_ids, torch.Tensor) else seq_ids
+            return torch.cat([torch.tensor([self.token_to_idx["[SOS]"]]), seq_ids[:-1]]) 
+
+        c_decoder_token_ids = shift_right(c_encoder_token_ids)
+        cpp_decoder_token_ids = shift_right(cpp_encoder_token_ids)
+
+        c_decoder_mask = (c_decoder_token_ids != pad_id).long()
+        cpp_decoder_mask = (cpp_decoder_token_ids != pad_id).long()
+
+        c_decoder_dist = c_encoder_dist.clone()
+        cpp_decoder_dist = cpp_encoder_dist.clone()
+
+        return c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_dist, cpp_encoder_dist, c_encoder_mask, cpp_encoder_mask, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_dist, cpp_decoder_dist, c_decoder_mask, cpp_decoder_mask
 
 if __name__ == "__main__":
     config = Config()
@@ -108,8 +122,21 @@ if __name__ == "__main__":
     val_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.use_lca_distance, mode="val", val_ratio=config.val_ratio, test_ratio=config.test_ratio)
     train_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.use_lca_distance, mode="test", val_ratio=config.val_ratio, test_ratio=config.test_ratio)
 
-    c_token_ids, cpp_token_ids, c_dist, cpp_dist = train_data[110]
-    print("C tokens:", c_token_ids)
-    print("C distance vector:", c_dist)
-    print("C++ tokens:", cpp_token_ids)
-    print("C++ distance vector:", cpp_dist)
+    c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_dist, cpp_encoder_dist, c_encoder_mask, cpp_encoder_mask, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_dist, cpp_decoder_dist, c_decoder_mask, cpp_decoder_mask = train_data[99]
+    
+    with open("results.txt", "w") as f:
+        f.write(f"C encoder token IDs: {c_encoder_token_ids.tolist()}\n")
+        f.write(f"C encoder distance vector: {c_encoder_dist.tolist()}\n")
+        f.write(f"C encoder mask: {c_encoder_mask.tolist()}\n\n")
+
+        f.write(f"C++ encoder token IDs: {cpp_encoder_token_ids.tolist()}\n")
+        f.write(f"C++ encoder distance vector: {cpp_encoder_dist.tolist()}\n")
+        f.write(f"C++ encoder mask: {cpp_encoder_mask.tolist()}\n\n")
+
+        f.write(f"C decoder token IDs: {c_decoder_token_ids.tolist()}\n")
+        f.write(f"C decoder distance vector: {c_decoder_dist.tolist()}\n")
+        f.write(f"C decoder mask: {c_decoder_mask.tolist()}\n\n")
+
+        f.write(f"C++ decoder token IDs: {cpp_decoder_token_ids.tolist()}\n")
+        f.write(f"C++ decoder distance vector: {cpp_decoder_dist.tolist()}\n")
+        f.write(f"C++ decoder mask: {cpp_decoder_mask.tolist()}\n")
