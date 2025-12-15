@@ -1,9 +1,7 @@
 clang==18.1.8
 bs4
 tqdm
-requests
-selenium 
-webdriver-manager
+torch
 pandas
 torch
 pyarrow

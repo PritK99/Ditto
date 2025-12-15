@@ -73,15 +73,21 @@ You will also need to change the path in `set_library_file()` in `tokenization.p
 
 For example, `/usr/lib/llvm-18/lib/libclang.so`
 
-### Data
+#### Data
 
-Link to the final data can be found <a href="https://iiithydresearch-my.sharepoint.com/:f:/g/personal/prit_kanadiya_research_iiit_ac_in/IgAR9lw8HyPETLpzUu7I1G_jAUhxaU9ng8d3bSwhgZ_NzbI?e=HIzkt0">here</a>. This contains line number, transformed tokens, all obfuscation dictionaries and LCA distance vector in triu form. The size of both files combined is ~26GBs.
+To fetch the training data, please execute `fetch_data.sh`.
 
-For training the model, we do not require obfuscation dictionaries. We only require transformed tokens and LCA distance vector. Link to the data useful for training can be found <a href="https://iiithydresearch-my.sharepoint.com/:f:/g/personal/prit_kanadiya_research_iiit_ac_in/IgAUZu2iso0HRqS21t70pEfnAdmpkvT8_uOQZ8vClWAwDb0?e=Vd6puv">here</a>. Please note that this data is in parquet format with combined size of ~1GB.
+`chmod +x fetch_data.sh`
 
-**Note:** The dataset provided above has been obtained after several preprocessing steps. To access the raw data files, intermediate output files, or logs, click <a href="https://iiithydresearch-my.sharepoint.com/:f:/g/personal/prit_kanadiya_research_iiit_ac_in/IgDP3mtf5hr1RIuOD9ePrzljAZbwoiaikGDwoTUWWTzUiDE?e=EWenOJ">here</a>.
+`./fetch_data.sh`
 
-### Model
+Alternatively, you can create a directory called `data` and cd into it. Then, download the data from <a href="https://iiithydresearch-my.sharepoint.com/:f:/g/personal/prit_kanadiya_research_iiit_ac_in/IgAUZu2iso0HRqS21t70pEfnAdmpkvT8_uOQZ8vClWAwDb0?e=Vd6puv">link</a>. Please note that this data is in parquet format with combined size of ~1GB.
+
+**Note 1:** For training the model, we do not require obfuscation dictionaries. We only require transformed tokens and LCA distance vector. Link to the full data can be found <a href="https://iiithydresearch-my.sharepoint.com/:f:/g/personal/prit_kanadiya_research_iiit_ac_in/IgAR9lw8HyPETLpzUu7I1G_jAUhxaU9ng8d3bSwhgZ_NzbI?e=HIzkt0">here</a>. This contains line number, transformed tokens, all obfuscation dictionaries and LCA distance vector in triu form. The size of both files combined is ~26GBs.
+
+**Note 2:** The dataset provided above has been obtained after several preprocessing steps. To access the raw data files, intermediate output files, or logs, click <a href="https://iiithydresearch-my.sharepoint.com/:f:/g/personal/prit_kanadiya_research_iiit_ac_in/IgDP3mtf5hr1RIuOD9ePrzljAZbwoiaikGDwoTUWWTzUiDE?e=EWenOJ">here</a>.
+
+#### Model
 
 ## References
 
