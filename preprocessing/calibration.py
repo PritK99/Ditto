@@ -36,4 +36,6 @@ max_cpp = max_lca_distance(cpp_file_path)
 overall_max = max(max_c, max_cpp)
 print("\nMaximum LCA distance in dataset:", overall_max)    # 271
 
-# Hence, relative bias will take [-271, 271] i.e. 543 distinct values.
+# Hence, relative bias will take [-273, 273] i.e. 545 distinct values.
+# Note, 271 becomes 273 because of the way we deal with SOS and EOS
+# 271 does not account for SOS and EOS
