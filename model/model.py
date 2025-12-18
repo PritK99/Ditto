@@ -166,7 +166,7 @@ class MultiHeadAttention(nn.Module):
         self.rope_pe = RotaryEmbedding(self.d_head, max_seq_len)  
         self.rel_bias_pe = RelativeBiasPE(num_heads, pos_vocab_size)
     
-    def forward(self, x, dist_matrix):
+    def forward(self, x, dist_matrix, src_mask):
         Q = self.q_linear(x).view(x.shape[0], x.shape[1], self.num_heads, self.d_head).transpose(1, 2)
         K = self.k_linear(x).view(x.shape[0], x.shape[1], self.num_heads, self.d_head).transpose(1, 2)
         V = self.v_linear(x).view(x.shape[0], x.shape[1], self.num_heads, self.d_head).transpose(1, 2)
@@ -178,6 +178,8 @@ class MultiHeadAttention(nn.Module):
         rel_bias_matrix = rel_bias_matrix.permute(0,3,1,2)    # This is (batch_size, num_heads, max_seq_len, max_seq_len)
         scores += rel_bias_matrix
 
+        scores = scores.masked_fill(src_mask == 0, float("-inf"))
+
         attn_probs = torch.softmax(scores, dim=-1)
         attn_probs = self.dropout(attn_probs)
         out = torch.matmul(attn_probs, V) 
@@ -185,3 +187,78 @@ class MultiHeadAttention(nn.Module):
         out = self.out(out)
 
         return out
+
+class EncoderLayer(nn.Module):
+    """
+    A single layer of encoder.
+    """
+    def __init__(self, d_model: int, self_attention_layer: MultiHeadAttention, feed_forward_network: FeedForwardNetwork, dropout: float) -> None:
+        """
+        Args:
+            d_model (int): The dimension of each embedding vector.
+            self_attention_layer (MultiHeadAttentionLayer): Layer implementing self attention.
+            feed_forward_network (FeedForwardNetwork): Layer implementing feedforward neural network.
+            dropout (float): Dropout value.
+        """
+        super().__init__()
+        self.self_attention_layer = self_attention_layer
+        self.feed_forward_network = feed_forward_network
+        self.residual_connection_1 = ResidualConnection(d_model, dropout)
+        self.residual_connection_2 = ResidualConnection(d_model, dropout)
+
+    def forward(self, x, dist_matrix, src_mask) -> torch.Tensor:
+        """
+        Args:
+            x (torch.Tensor): Matrix of shape (batch_size, seq_len, d_model).
+            src_mask (torch.Tensor): Source mask.
+
+        Returns:
+            x (torch.Tensor): Resultant matrix of shape (batch_size, seq_len, d_model).
+        """
+        # We need to use lambda because we need to pass a function as parameter
+        x = self.residual_connection_1(x, lambda x: self.self_attention_layer(x, dist_matrix, src_mask))
+        x = self.residual_connection_2(x, lambda x: self.feed_forward_network(x))
+        return x
+
+class Encoder(nn.Module):
+    """
+    Assembles all the encoder layers.
+    """
+    def __init__(self, num_encoders: int, d_model: int, num_heads: int, ffn_hidden_size: int, max_seq_len: int, pos_vocab_size: int, dropout: float = 0.1) -> None:
+        """
+        Args:
+            num_encoders (int): Number of encoders.
+            d_model (int): The dimension of each embedding vector.
+            num_heads (int): Number of heads.
+            hidden_size (int): The size of hidden layer in feedforward network.
+            seq_len (int): length of the sequence
+            pe_method (str): positional encoding method
+            dropout (float): Dropout value.
+        """
+        super().__init__()
+        self.num_encoders = num_encoders
+        self.norm = LayerNorm(d_model)
+
+        encoder_layers = []
+        for i in range(num_encoders):
+            self_attention_layer = MultiHeadAttention(d_model, num_heads, max_seq_len, pos_vocab_size, dropout)
+            feed_forward_network = FeedForwardNetwork(d_model, ffn_hidden_size, dropout)
+            encoder_layer = EncoderLayer(d_model, self_attention_layer, feed_forward_network, dropout)
+            encoder_layers.append(encoder_layer)
+        
+        # We need to make encoder_layers as a ModuleList
+        self.encoder_layers = nn.ModuleList(encoder_layers)
+
+    def forward(self, x, dist_matrix, src_mask) -> torch.Tensor:
+        """
+        Args:
+            x (torch.Tensor): Matrix of shape (batch_size, seq_len, d_model).
+            src_mask (torch.Tensor): Source mask of shape (1, 1, 1, seq_len) for dealing with padding tokens
+
+        Returns:
+            x (torch.Tensor): Resultant matrix of shape (batch_size, seq_len, d_model).
+        """
+        for layer in self.encoder_layers:
+            x = layer(x, dist_matrix, src_mask)
+        
+        return self.norm(x)

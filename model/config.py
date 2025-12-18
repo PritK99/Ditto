@@ -8,8 +8,10 @@ class Config:
     use_lca_distance = True    # False is Baseline Relative Bias approach
     val_ratio = 0.05
     test_ratio = 0.05
-    d_model = 256
+    d_model = 512
     num_heads = 4
     vocab_size = 1001    # 997 + [UNK] + [SOS] + [EOS] + [PAD]
     max_pos = 273    # This is the max pos value taken by tokens
     pos_vocab_size = 547    # Positions go from [-max_pos, max_pos]. Hence, pos_vocab_size = 2*max_pos + 1. max_pos is 271. 
+    num_encoders = 3
+    ffn_hidden_size = 1024

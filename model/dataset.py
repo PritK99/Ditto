@@ -1,7 +1,7 @@
 import torch
 from config import Config  
 import pyarrow.parquet as pq
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from utils import triu_to_full_matrix
 
 class TranspilerDataset(Dataset):
@@ -118,12 +118,29 @@ class TranspilerDataset(Dataset):
         # cpp_decoder_dist = cpp_encoder_dist.clone()
 
         return c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_matrix, cpp_encoder_matrix, c_encoder_mask, cpp_encoder_mask    # , c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_dist, cpp_decoder_dist, c_decoder_mask, cpp_decoder_mask
-
-if __name__ == "__main__":
-    config = Config()
-
+    
+def get_dataloaders(config):
     train_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.max_pos, config.use_lca_distance, mode="train", val_ratio=config.val_ratio, test_ratio=config.test_ratio, verbose=True)
     val_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.max_pos, config.use_lca_distance, mode="val", val_ratio=config.val_ratio, test_ratio=config.test_ratio)
     test_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.max_pos, config.use_lca_distance, mode="test", val_ratio=config.val_ratio, test_ratio=config.test_ratio)
 
-    c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_matrix, cpp_encoder_matrix, c_encoder_mask, cpp_encoder_mask = train_data[99]
+    train_dataloader = DataLoader(train_data, batch_size=4, shuffle=True)
+    val_dataloader = DataLoader(val_data, batch_size=4, shuffle=False)
+    test_dataloader = DataLoader(test_data, batch_size=4, shuffle=False)
+
+    return train_dataloader, val_dataloader, test_dataloader
+
+
+if __name__ == "__main__":
+    config = Config()
+
+    # train_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.max_pos, config.use_lca_distance, mode="train", val_ratio=config.val_ratio, test_ratio=config.test_ratio, verbose=True)
+    # val_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.max_pos, config.use_lca_distance, mode="val", val_ratio=config.val_ratio, test_ratio=config.test_ratio)
+    # test_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.max_pos, config.use_lca_distance, mode="test", val_ratio=config.val_ratio, test_ratio=config.test_ratio)
+
+    # c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_matrix, cpp_encoder_matrix, c_encoder_mask, cpp_encoder_mask = train_data[99]
+
+    train_dataloader, val_dataloader, test_dataloader = get_dataloaders(config)
+
+    for c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_matrix, cpp_encoder_matrix, c_encoder_mask, cpp_encoder_mask in train_dataloader:
+        print(c_encoder_mask.shape)
