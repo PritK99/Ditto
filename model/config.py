@@ -9,6 +9,7 @@ class Config:
     use_lca_distance = True    # False is Baseline Relative Bias approach
     val_ratio = 0.05
     test_ratio = 0.05
+    num_epochs = 5
     d_model = 512
     num_heads = 4
     vocab_size = 1001    # 997 + [UNK] + [SOS] + [EOS] + [PAD]
@@ -18,3 +19,4 @@ class Config:
     num_decoders = 3
     ffn_hidden_size = 1024
     dropout = 0.1
+    pad_idx = 0
