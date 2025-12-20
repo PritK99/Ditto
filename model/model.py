@@ -166,10 +166,10 @@ class MultiHeadAttention(nn.Module):
         self.rope_pe = RotaryEmbedding(self.d_head, max_seq_len)  
         self.rel_bias_pe = RelativeBiasPE(num_heads, pos_vocab_size)
     
-    def forward(self, x, dist_matrix, src_mask):
-        Q = self.q_linear(x).view(x.shape[0], x.shape[1], self.num_heads, self.d_head).transpose(1, 2)
-        K = self.k_linear(x).view(x.shape[0], x.shape[1], self.num_heads, self.d_head).transpose(1, 2)
-        V = self.v_linear(x).view(x.shape[0], x.shape[1], self.num_heads, self.d_head).transpose(1, 2)
+    def forward(self, key, query, value, dist_matrix, src_mask):
+        K = self.k_linear(key).view(key.shape[0], key.shape[1], self.num_heads, self.d_head).transpose(1, 2)
+        Q = self.q_linear(query).view(query.shape[0], query.shape[1], self.num_heads, self.d_head).transpose(1, 2)
+        V = self.v_linear(value).view(value.shape[0], value.shape[1], self.num_heads, self.d_head).transpose(1, 2)
         
         Q, K = self.rope_pe(Q, K)
         scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.d_head)
@@ -183,7 +183,7 @@ class MultiHeadAttention(nn.Module):
         attn_probs = torch.softmax(scores, dim=-1)
         attn_probs = self.dropout(attn_probs)
         out = torch.matmul(attn_probs, V) 
-        out = out.transpose(1,2).contiguous().view(x.shape[0], x.shape[1], self.d_model)
+        out = out.transpose(1,2).contiguous().view(query.shape[0], query.shape[1], self.d_model)
         out = self.out(out)
 
         return out
@@ -206,7 +206,7 @@ class EncoderLayer(nn.Module):
         self.residual_connection_1 = ResidualConnection(d_model, dropout)
         self.residual_connection_2 = ResidualConnection(d_model, dropout)
 
-    def forward(self, x, dist_matrix, src_mask) -> torch.Tensor:
+    def forward(self, enc_input, dist_matrix, src_mask) -> torch.Tensor:
         """
         Args:
             x (torch.Tensor): Matrix of shape (batch_size, seq_len, d_model).
@@ -216,7 +216,7 @@ class EncoderLayer(nn.Module):
             x (torch.Tensor): Resultant matrix of shape (batch_size, seq_len, d_model).
         """
         # We need to use lambda because we need to pass a function as parameter
-        x = self.residual_connection_1(x, lambda x: self.self_attention_layer(x, dist_matrix, src_mask))
+        x = self.residual_connection_1(enc_input, lambda x: self.self_attention_layer(x, x, x, dist_matrix, src_mask))
         x = self.residual_connection_2(x, lambda x: self.feed_forward_network(x))
         return x
 
@@ -230,9 +230,8 @@ class Encoder(nn.Module):
             num_encoders (int): Number of encoders.
             d_model (int): The dimension of each embedding vector.
             num_heads (int): Number of heads.
-            hidden_size (int): The size of hidden layer in feedforward network.
-            seq_len (int): length of the sequence
-            pe_method (str): positional encoding method
+            ffn_hidden_size (int): The size of hidden layer in feedforward network.
+            max_seq_len (int): length of the sequence.
             dropout (float): Dropout value.
         """
         super().__init__()
@@ -262,3 +261,153 @@ class Encoder(nn.Module):
             x = layer(x, dist_matrix, src_mask)
         
         return self.norm(x)
+
+class DecoderLayer(nn.Module):
+    """
+    A single layer of decoder.
+    """
+    def __init__(self, d_model: int, masked_attention_layer: MultiHeadAttention, cross_attention_layer: MultiHeadAttention, feed_forward_network: FeedForwardNetwork, dropout: float) -> None:
+        """
+        Args:
+            d_model (int): The dimension of each embedding vector.
+            masked_attention_layer (MultiHeadAttentionLayer): Layer implementing masked self attention.
+            cross_attention_layer (MultiHeadAttentionLayer): Layer implementing cross attention.
+            feed_forward_network (FeedForwardNetwork): Layer implementing feedforward neural network.
+            dropout (float): Dropout value.
+        """
+        super().__init__()
+        self.masked_attention_layer = masked_attention_layer
+        self.cross_attention_layer = cross_attention_layer
+        self.feed_forward_network = feed_forward_network
+        self.residual_connection_1 = ResidualConnection(d_model, dropout)
+        self.residual_connection_2 = ResidualConnection(d_model, dropout)
+        self.residual_connection_3 = ResidualConnection(d_model, dropout)
+
+    def forward(self, dec_input, enc_dist_matrix, dec_dist_matrix, tgt_mask, enc_output, src_mask) -> torch.Tensor:
+        """
+        Args:
+            dec_input (torch.Tensor): Matrix of shape (batch_size, seq_len, d_model).
+            tgt_mask (torch.Tensor): Target mask.
+            enc_output (torch.Tensor): Output from the encoder of shape (batch_size, seq_len, d_model).
+            src_mask (torch.Tensor): Source mask.
+
+        Returns:
+            x (torch.Tensor): Resultant matrix of shape (batch_size, seq_len, d_model).
+        """
+        x = self.residual_connection_1(dec_input, lambda x: self.masked_attention_layer(x, x, x, dec_dist_matrix, tgt_mask))
+        x = self.residual_connection_2(x, lambda x: self.cross_attention_layer(enc_output, x, enc_output, enc_dist_matrix, src_mask))    # The encoder output acts as key and value
+        x = self.residual_connection_3(x, lambda x: self.feed_forward_network(x))
+        return x
+
+class Decoder(nn.Module):
+    """
+    Assembles all the decoder layers.
+    """
+    def __init__(self, num_decoders: int, d_model: int, num_heads: int, ffn_hidden_size: int, max_seq_len: int, pos_vocab_size: int, dropout: float = 0.1) -> None:
+        """
+        Args:
+            num_decoders (int): Number of encoders.
+            d_model (int): The dimension of each embedding vector.
+            num_heads (int): Number of heads.
+            ffn_hidden_size (int): The size of hidden layer in feedforward network.
+            max_seq_len (int): length of the sequence.
+            dropout (float): Dropout value.
+        """
+        super().__init__()
+        self.num_decoders = num_decoders
+        self.norm = LayerNorm(d_model)
+
+        decoder_layers = []
+        for i in range(num_decoders):
+            masked_attention_layer = MultiHeadAttention(d_model, num_heads, max_seq_len, pos_vocab_size, dropout)
+            cross_attention_layer = MultiHeadAttention(d_model, num_heads, max_seq_len, pos_vocab_size, dropout)
+            feed_forward_network = FeedForwardNetwork(d_model, ffn_hidden_size, dropout)
+            decoder = DecoderLayer(d_model, masked_attention_layer, cross_attention_layer, feed_forward_network, dropout)
+            decoder_layers.append(decoder)
+        
+        self.decoder_layers = nn.ModuleList(decoder_layers)
+
+    def forward(self, x, enc_dist_matrix, dec_dist_matrix, tgt_mask, enc_output, src_mask) -> torch.Tensor:
+        """
+        Args:
+            x (torch.Tensor): decoder input of shape (batch_size, tgt_seq_len, d_model).
+            tgt_mask (torch.Tensor): target mask.
+            enc_output (torch.Tensor): encoder output of shape (batch_size, src_seq_len, d_model).
+            src_mask (torch.Tensor): source mask.
+
+        Returns:
+            x (torch.Tensor): Resultant matrix of shape (batch_size, seq_len, d_model).
+        """
+        for layer in self.decoder_layers:
+            x = layer(x, enc_dist_matrix, dec_dist_matrix, tgt_mask, enc_output, src_mask)
+        
+        return self.norm(x)
+    
+class ProjectionLayer(nn.Module):
+    """
+    Projects the output of decoder to vocabulory size vector.
+    """
+    def __init__(self, d_model: int, vocab_size: int) -> None:
+        """
+        Args:
+            vocab_size (int): Number of words in the vocabulory.
+            d_model (int): The dimension of each embedding vector.
+        """
+        super().__init__()
+        self.projection_layer = nn.Linear(d_model, vocab_size)
+    
+    def forward(self, x) -> torch.Tensor:
+        """
+        Args:
+            x (torch.Tensor): Matrix of shape (batch_size, d_model).
+
+        Returns:
+            x (torch.Tensor): Resultant matrix of shape (batch_size, vocab_size).
+        """
+        x = self.projection_layer(x)
+        return x 
+
+class Ditto(nn.Module):
+    """
+    Integrating all components
+    """
+    def __init__(self, d_model: int, vocab_size: int, num_encoders: int, num_decoders: int, num_heads: int, ffn_hidden_size: int, max_seq_len: int, pos_vocab_size: int, dropout: float):
+        super().__init__()
+        # Initializing embedding layer
+        self.embedding_layer = Embeddings(d_model, vocab_size, 0)
+        embedding_params = sum(p.numel() for p in self.embedding_layer.parameters() if p.requires_grad)
+        print(f"Trainable parameters in embedding layer: {embedding_params:,}")
+
+        # Initializing shared encoder
+        self.shared_encoder = Encoder(num_encoders, d_model, num_heads, ffn_hidden_size, max_seq_len, pos_vocab_size, dropout)
+        trainable_shared_encoder_params = sum(p.numel() for p in self.shared_encoder.parameters() if p.requires_grad)
+        print(f"Trainable parameters in shared encoder: {trainable_shared_encoder_params:,}")
+
+        # Initializing decoders for C and C++
+        self.c_decoder = Decoder(num_decoders, d_model, num_heads, ffn_hidden_size, max_seq_len, pos_vocab_size, dropout)
+        self.cpp_decoder = Decoder(num_decoders, d_model, num_heads, ffn_hidden_size, max_seq_len, pos_vocab_size, dropout)
+        trainable_decoder_params = sum(p.numel() for p in self.c_decoder.parameters() if p.requires_grad)
+        print(f"Trainable parameters in a single decoder: {trainable_decoder_params:,}")
+
+        self.projection_layer = ProjectionLayer(d_model, vocab_size)
+        trainable_projection_params = sum(p.numel() for p in self.projection_layer.parameters() if p.requires_grad)
+        print(f"Trainable parameters in projection layer: {trainable_projection_params:,}")
+
+        print(f"Total parameters: {(embedding_params + trainable_shared_encoder_params + 2*trainable_decoder_params + trainable_projection_params):,}")
+    
+    def forward(self, c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask):
+        c_enc_embeddings = self.embedding_layer(c_encoder_token_ids)    # Convert (batch_size, max_seq_len) to (batch_size, max_seq_len, d_model)
+        c_dec_embeddings = self.embedding_layer(c_decoder_token_ids)
+        c_encoder_mask = c_encoder_mask.unsqueeze(1).unsqueeze(1)    # Convert (batch_size, max_seq_len) to (batch_size, 1, 1, max_seq_len)
+        c_enc_out = self.shared_encoder(c_enc_embeddings, c_encoder_dist_matrix, c_encoder_mask)
+        c_dec_out = self.c_decoder(c_dec_embeddings, c_encoder_dist_matrix, c_decoder_dist_matrix, c_decoder_mask, c_enc_out, c_encoder_mask)
+        c_out = self.projection_layer(c_dec_out)
+
+        cpp_enc_embeddings = self.embedding_layer(cpp_encoder_token_ids)    
+        cpp_dec_embeddings = self.embedding_layer(cpp_decoder_token_ids)
+        cpp_encoder_mask = cpp_encoder_mask.unsqueeze(1).unsqueeze(1)    
+        cpp_enc_out = self.shared_encoder(cpp_enc_embeddings, cpp_encoder_dist_matrix, cpp_encoder_mask)
+        cpp_dec_out = self.cpp_decoder(cpp_dec_embeddings, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, cpp_decoder_mask, cpp_enc_out, cpp_encoder_mask)
+        cpp_out = self.projection_layer(cpp_dec_out)
+
+        return c_out, cpp_out

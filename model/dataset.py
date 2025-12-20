@@ -1,5 +1,4 @@
 import torch
-from config import Config  
 import pyarrow.parquet as pq
 from torch.utils.data import Dataset, DataLoader
 from utils import triu_to_full_matrix
@@ -82,65 +81,65 @@ class TranspilerDataset(Dataset):
         else:    # This is the baseline approach
             c_dist = self.get_vanilla_relative_bias_triu(len(c_tokens))
             cpp_dist = self.get_vanilla_relative_bias_triu(len(cpp_tokens))
+        
+        c_dist = torch.tensor(c_dist, dtype=torch.long)
+        cpp_dist = torch.tensor(cpp_dist, dtype=torch.long)
+        
+        def get_encoder_input(tokens, max_len):
+            num_pad = max_len - len(tokens) - 1  # only [EOS] is appended to encoder input
+            return [self.token_to_idx.get(t, self.token_to_idx["[UNK]"]) for t in tokens] + [self.token_to_idx["[EOS]"]] + [self.token_to_idx["[PAD]"]] * num_pad
+            # For example, [Hi, from, Ditto, [EOS]]
+        
+        def get_decoder_input(tokens, max_len):
+            num_pad = max_len - (len(tokens) -1) - 1  # only [SOS] is appended to decoder input. Also, len(tokens) - 1 is done because we perform right shift
+            return [self.token_to_idx["[SOS]"]] + [self.token_to_idx.get(t, self.token_to_idx["[UNK]"]) for t in tokens][:-1] + [self.token_to_idx["[PAD]"]] * num_pad
+            # For example, [[SOS], Hi, from, Ditto]
+        
+        # Preparing distance matrix for encoder and decoder
+        c_encoder_dist_matrix, c_decoder_dist_matrix = triu_to_full_matrix(c_dist, self.max_seq_len, self.max_pos)
+        cpp_encoder_dist_matrix, cpp_decoder_dist_matrix = triu_to_full_matrix(cpp_dist, self.max_seq_len, self.max_pos)
 
-        def pad_seq(tokens, max_len):
-            num_pad = max_len - len(tokens) - 2    # -2 comes as we need [SOS] and [EOS] as well
-            return [self.token_to_idx["[SOS]"]] + [self.token_to_idx.get(t, self.token_to_idx["[UNK]"]) for t in tokens] + [self.token_to_idx["[EOS]"]] + [self.token_to_idx["[PAD]"]] * num_pad 
+        # Preparing encoder and decoder inputs
+        # Decoder target is nothing but encoder input
+        c_encoder_token_ids = get_encoder_input(c_tokens, self.max_seq_len)
+        cpp_encoder_token_ids = get_encoder_input(cpp_tokens, self.max_seq_len)
+        c_encoder_token_ids = torch.tensor(c_encoder_token_ids, dtype=torch.long)
+        cpp_encoder_token_ids = torch.tensor(cpp_encoder_token_ids, dtype=torch.long)
 
-        c_tokens_ids = pad_seq(c_tokens, self.max_seq_len)
-        cpp_tokens_ids = pad_seq(cpp_tokens, self.max_seq_len)
+        c_decoder_token_ids = get_decoder_input(c_tokens, self.max_seq_len)
+        cpp_decoder_token_ids = get_decoder_input(cpp_tokens, self.max_seq_len)
+        c_decoder_token_ids = torch.tensor(c_decoder_token_ids, dtype=torch.long)
+        cpp_decoder_token_ids = torch.tensor(cpp_decoder_token_ids, dtype=torch.long)
 
-        c_encoder_token_ids = torch.tensor(c_tokens_ids, dtype=torch.long)
-        cpp_encoder_token_ids = torch.tensor(cpp_tokens_ids, dtype=torch.long)
-        c_encoder_dist = torch.tensor(c_dist, dtype=torch.long)
-        cpp_encoder_dist = torch.tensor(cpp_dist, dtype=torch.long)
-
-        # We also require masks
+        # Creating masks
         pad_id = self.token_to_idx["[PAD]"]
         c_encoder_mask = (c_encoder_token_ids != pad_id).long()
         cpp_encoder_mask = (cpp_encoder_token_ids != pad_id).long()
 
-        c_encoder_matrix = triu_to_full_matrix(c_encoder_dist, self.max_seq_len, self.max_pos)
-        cpp_encoder_matrix = triu_to_full_matrix(cpp_encoder_dist, self.max_seq_len, self.max_pos)
+        def causal_mask(seq_len, device):
+            """
+            Returns a boolean causal mask of shape (seq_len, seq_len) where True means attention is allowed.
+            """
+            return torch.tril(torch.ones(seq_len, seq_len, device=device, dtype=torch.bool))
+        c_decoder_pad_mask = (c_decoder_token_ids != pad_id).long()
+        cpp_decoder_pad_mask = (cpp_decoder_token_ids != pad_id).long()
+        causal = causal_mask(self.max_seq_len, device=c_decoder_token_ids.device)
+        
+        c_pad = c_decoder_pad_mask.unsqueeze(0)
+        cpp_pad = cpp_decoder_pad_mask.unsqueeze(0)
 
-        # # The same process has to be repeated for decoder side
-        # def shift_right(seq_ids):
-        #     seq_ids = torch.tensor(seq_ids, dtype=torch.long) if not isinstance(seq_ids, torch.Tensor) else seq_ids
-        #     return torch.cat([torch.tensor([self.token_to_idx["[SOS]"]]), seq_ids[:-1]]) 
+        c_decoder_mask = (causal.unsqueeze(0) & c_pad.unsqueeze(1))
+        cpp_decoder_mask = (causal.unsqueeze(0) & cpp_pad.unsqueeze(1))                           
 
-        # c_decoder_token_ids = shift_right(c_encoder_token_ids)
-        # cpp_decoder_token_ids = shift_right(cpp_encoder_token_ids)
-
-        # c_decoder_mask = (c_decoder_token_ids != pad_id).long()
-        # cpp_decoder_mask = (cpp_decoder_token_ids != pad_id).long()
-
-        # c_decoder_dist = c_encoder_dist.clone()
-        # cpp_decoder_dist = cpp_encoder_dist.clone()
-
-        return c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_matrix, cpp_encoder_matrix, c_encoder_mask, cpp_encoder_mask    # , c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_dist, cpp_decoder_dist, c_decoder_mask, cpp_decoder_mask
+        return c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask
     
-def get_dataloaders(config):
-    train_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.max_pos, config.use_lca_distance, mode="train", val_ratio=config.val_ratio, test_ratio=config.test_ratio, verbose=True)
-    val_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.max_pos, config.use_lca_distance, mode="val", val_ratio=config.val_ratio, test_ratio=config.test_ratio)
-    test_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.max_pos, config.use_lca_distance, mode="test", val_ratio=config.val_ratio, test_ratio=config.test_ratio)
+def get_dataloaders(c_data_path, cpp_data_path, vocab_path, batch_size, max_seq_len, max_pos, use_lca_distance, val_ratio, test_ratio):
+    train_data = TranspilerDataset(c_data_path, cpp_data_path, vocab_path, max_seq_len, max_pos, use_lca_distance, mode="train", val_ratio=val_ratio, test_ratio=test_ratio, verbose=True)
+    val_data = TranspilerDataset(c_data_path, cpp_data_path, vocab_path, max_seq_len, max_pos, use_lca_distance, mode="val", val_ratio=val_ratio, test_ratio=test_ratio)
+    test_data = TranspilerDataset(c_data_path, cpp_data_path, vocab_path, max_seq_len, max_pos, use_lca_distance, mode="test", val_ratio=val_ratio, test_ratio=test_ratio)
 
-    train_dataloader = DataLoader(train_data, batch_size=4, shuffle=True)
-    val_dataloader = DataLoader(val_data, batch_size=4, shuffle=False)
-    test_dataloader = DataLoader(test_data, batch_size=4, shuffle=False)
+    train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_data, batch_size=batch_size, shuffle=False)
+    test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
     return train_dataloader, val_dataloader, test_dataloader
-
-
-if __name__ == "__main__":
-    config = Config()
-
-    # train_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.max_pos, config.use_lca_distance, mode="train", val_ratio=config.val_ratio, test_ratio=config.test_ratio, verbose=True)
-    # val_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.max_pos, config.use_lca_distance, mode="val", val_ratio=config.val_ratio, test_ratio=config.test_ratio)
-    # test_data = TranspilerDataset(config.c_data_path, config.cpp_data_path, config.vocab_path, config.max_seq_len, config.max_pos, config.use_lca_distance, mode="test", val_ratio=config.val_ratio, test_ratio=config.test_ratio)
-
-    # c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_matrix, cpp_encoder_matrix, c_encoder_mask, cpp_encoder_mask = train_data[99]
-
-    train_dataloader, val_dataloader, test_dataloader = get_dataloaders(config)
-
-    for c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_matrix, cpp_encoder_matrix, c_encoder_mask, cpp_encoder_mask in train_dataloader:
-        print(c_encoder_mask.shape)
