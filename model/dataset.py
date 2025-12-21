@@ -1,7 +1,7 @@
 import torch
 import pyarrow.parquet as pq
 from torch.utils.data import Dataset, DataLoader
-from utils import triu_to_full_matrix
+from utils import triu_to_full_matrix    #, triu_to_full_matrix_vectorized
 
 class TranspilerDataset(Dataset):
     def __init__(self, c_data_path, cpp_data_path, vocab_path, max_seq_len, max_pos, use_lca_distance=False, mode="train", val_ratio=0.05, test_ratio=0.05, verbose=False):
@@ -99,6 +99,31 @@ class TranspilerDataset(Dataset):
         c_encoder_dist_matrix, c_decoder_dist_matrix = triu_to_full_matrix(c_dist, self.max_seq_len, self.max_pos)
         cpp_encoder_dist_matrix, cpp_decoder_dist_matrix = triu_to_full_matrix(cpp_dist, self.max_seq_len, self.max_pos)
 
+        # # Trying some optimizations
+        # c_encoder_dist_matrix_vec, c_decoder_dist_matrix_vec = triu_to_full_matrix_vectorized(c_dist, self.max_seq_len, self.max_pos)
+        # cpp_encoder_dist_matrix_vec, cpp_decoder_dist_matrix_vec = triu_to_full_matrix_vectorized(cpp_dist, self.max_seq_len, self.max_pos)
+
+        # if not torch.equal(c_encoder_dist_matrix, c_encoder_dist_matrix_vec):
+        #     diff = (c_encoder_dist_matrix != c_encoder_dist_matrix_vec).nonzero(as_tuple=False)
+        #     i, j = diff[0].tolist()
+        #     print(
+        #         "[ENCODER MISMATCH]",
+        #         f"at ({i}, {j}):",
+        #         f"ref={c_encoder_dist_matrix_vec[i, j].item()},",
+        #         f"vec={c_encoder_dist_matrix[i, j].item()}",
+        #         flush=True
+        #     )
+        # if not torch.equal(c_decoder_dist_matrix, c_decoder_dist_matrix_vec):
+        #     diff = (c_decoder_dist_matrix != c_decoder_dist_matrix_vec).nonzero(as_tuple=False)
+        #     i, j = diff[0].tolist()
+        #     print(
+        #         "[DECODER MISMATCH]",
+        #         f"at ({i}, {j}):",
+        #         f"ref={c_decoder_dist_matrix[i, j].item()},",
+        #         f"vec={c_decoder_dist_matrix_vec[i, j].item()}",
+        #         flush=True
+        #     )
+
         # Preparing encoder and decoder inputs
         # Decoder target is nothing but encoder input
         c_encoder_token_ids = get_encoder_input(c_tokens, self.max_seq_len)
@@ -138,7 +163,7 @@ def get_dataloaders(c_data_path, cpp_data_path, vocab_path, batch_size, max_seq_
     val_data = TranspilerDataset(c_data_path, cpp_data_path, vocab_path, max_seq_len, max_pos, use_lca_distance, mode="val", val_ratio=val_ratio, test_ratio=test_ratio)
     test_data = TranspilerDataset(c_data_path, cpp_data_path, vocab_path, max_seq_len, max_pos, use_lca_distance, mode="test", val_ratio=val_ratio, test_ratio=test_ratio)
 
-    train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
     val_dataloader = DataLoader(val_data, batch_size=batch_size, shuffle=False)
     test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 

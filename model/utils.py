@@ -16,11 +16,9 @@ def triu_to_full_matrix(triu, max_seq_len, max_pos):
     For encoder, we need to skip first row and first col of dist matrix
     For decoder, we need to skip Nth row and Nth column of dist matrix, where N corresponds to [EOS] position in original dist matrix
     """
-    max_seq_len += 1    # This is because we are constructing the positional matrix for [SOS] + tokens + [EOS] first, and then trimming [SOS] row for encoder input and [EOS] for decoder input
-
     num_tokens = int((1 + math.isqrt(1 + 8*len(triu))) // 2)
     # dist_matrix = torch.zeros((max_seq_len, max_seq_len), dtype=triu.dtype)    # Our distance matrix needs to be of (1002, 1002)
-    dist_matrix = torch.full((max_seq_len, max_seq_len), -1, dtype=torch.int64)    # We fill with -1 for [PAD]
+    dist_matrix = torch.full((max_seq_len+1, max_seq_len+1), -1, dtype=torch.int64)    # We fill with -1 for [PAD]. +1 is because we are constructing the positional matrix for [SOS] + tokens + [EOS] first, and then trimming [SOS] row for encoder input and [EOS] for decoder input
 
     for i in range(1, num_tokens+1):
         for j in range(i, num_tokens+1):
@@ -58,3 +56,62 @@ def triu_to_full_matrix(triu, max_seq_len, max_pos):
     encoder_dist_matrix = dist_matrix[1:, 1:]
 
     return encoder_dist_matrix, decoder_dist_matrix
+
+# def triu_to_full_matrix_vectorized(triu, max_seq_len, max_pos):
+#     """
+#     Vectorized CPU version that is EXACTLY equivalent to the original implementation.
+#     """
+
+#     device = triu.device
+#     dtype = triu.dtype
+
+#     max_seq_len += 1  # [SOS] + tokens + [EOS]
+
+#     # Number of tokens inferred from triu length
+#     L = int((1 + math.isqrt(1 + 8 * triu.numel())) // 2)
+
+#     # Initialize with PAD
+#     dist = torch.full(
+#         (max_seq_len, max_seq_len),
+#         -1,
+#         dtype=dtype,
+#         device=device
+#     )
+
+#     # Token indices (1..L)
+#     idx = torch.arange(1, L + 1, device=device)
+
+#     # Diagonal
+#     dist[idx, idx] = max_pos
+
+#     # Upper triangle indices
+#     iu, ju = torch.triu_indices(L, L, offset=1, device=device)
+#     iu += 1
+#     ju += 1
+
+#     # IMPORTANT: apply +max_pos here (matches get_dist_from_triu)
+#     upper = triu + max_pos
+
+#     dist[iu, ju] = upper
+#     dist[ju, iu] = 2 * max_pos - upper
+
+#     # [SOS]
+#     dist[0, 0] = max_pos
+#     dist[idx, 0] = dist[idx, 1] - 1
+#     dist[0, idx] = dist[1, idx] + 1
+
+#     # Decoder matrix (before EOS)
+#     decoder_dist = dist[:-1, :-1].clone()
+
+#     # [EOS]
+#     eos = L + 1
+#     dist[eos, eos] = max_pos
+#     dist[idx, eos] = dist[idx, L] + 1
+#     dist[eos, idx] = dist[L, idx] - 1
+#     dist[0, eos] = dist[0, L] + 1
+#     dist[eos, 0] = dist[L, 0] + 1
+
+#     # Encoder matrix (remove SOS)
+#     encoder_dist = dist[1:, 1:]
+
+#     return encoder_dist, decoder_dist
