@@ -32,10 +32,10 @@ def train_one_epoch(model, train_dataloader, val_dataloader, loss_func, optimize
         c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask = c_encoder_token_ids.to(device), cpp_encoder_token_ids.to(device), c_encoder_mask.to(device), cpp_encoder_mask.to(device), c_encoder_dist_matrix.to(device), c_decoder_dist_matrix.to(device), cpp_encoder_dist_matrix.to(device), cpp_decoder_dist_matrix.to(device), c_decoder_token_ids.to(device), cpp_decoder_token_ids.to(device), c_decoder_mask.to(device), cpp_decoder_mask.to(device)
 
         optimizer.zero_grad()
-        c_out, cpp_out = ditto(c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask)
-        loss = loss_func(c_out, cpp_out, c_encoder_token_ids, cpp_encoder_token_ids)
+        c_out, cpp_out = model(c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask)
+        loss = loss_func(c_out, cpp_out, c_decoder_token_ids, cpp_decoder_token_ids)
         loss.backward()
-        train_loss += loss
+        train_loss += loss.item()
         optimizer.step()
     
     model.eval()
@@ -45,9 +45,9 @@ def train_one_epoch(model, train_dataloader, val_dataloader, loss_func, optimize
             # Moving everything to device
             c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask = c_encoder_token_ids.to(device), cpp_encoder_token_ids.to(device), c_encoder_mask.to(device), cpp_encoder_mask.to(device), c_encoder_dist_matrix.to(device), c_decoder_dist_matrix.to(device), cpp_encoder_dist_matrix.to(device), cpp_decoder_dist_matrix.to(device), c_decoder_token_ids.to(device), cpp_decoder_token_ids.to(device), c_decoder_mask.to(device), cpp_decoder_mask.to(device)
 
-            c_out, cpp_out = ditto(c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask)
+            c_out, cpp_out = model(c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask)
             loss = loss_func(c_out, cpp_out, c_encoder_token_ids, cpp_encoder_token_ids)
-            val_loss += loss
+            val_loss += loss.item()
         
     train_loss /= len(train_dataloader)
     val_loss /= len(val_dataloader)
@@ -57,10 +57,12 @@ def train_one_epoch(model, train_dataloader, val_dataloader, loss_func, optimize
 def train(model, num_epochs, train_dataloader, val_dataloader, loss_func, optimizer, device):
     train_losses = []
     val_losses = []
-    for epochs in num_epochs:
+    print("Starting Training", flush = True)
+    for epoch in range(num_epochs):
         train_loss, val_loss = train_one_epoch(model, train_dataloader, val_dataloader, loss_func, optimizer, device)
         train_losses.append(train_loss)
-        val_losses.append(val_losses)
+        val_losses.append(val_loss)
+        print(f"Completed epoch {epoch}: Training loss = {train_loss} and Validation loss = {val_loss}", flush = True)
     
     return train_loss, val_loss
 
@@ -70,8 +72,16 @@ if __name__ == "__main__":
     train_dataloader, val_dataloader, test_dataloader = get_dataloaders(config.c_data_path, config.cpp_data_path, config.vocab_path, config.batch_size, config.max_seq_len, config.max_pos, config.use_lca_distance, config.val_ratio, config.test_ratio)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
     loss_func = JointReconstructionLoss(config.pad_idx)
     ditto = Ditto(config.d_model, config.vocab_size, config.num_encoders, config.num_decoders, config.num_heads, config.ffn_hidden_size, config.max_seq_len, config.pos_vocab_size, config.dropout)
+
+    if torch.cuda.device_count() >= 2:
+        print(f"Using {torch.cuda.device_count()} GPUs")
+        ditto = nn.DataParallel(ditto)
+    
+    ditto = ditto.to(device)
     optimizer = torch.optim.Adam(ditto.parameters(), lr=config.lr)
     
-    train(ditto, config.num_epochs, train_dataloader, val_dataloader, loss_func, optimizer, device)
+    train_loss, val_loss = train(ditto, config.num_epochs, train_dataloader, val_dataloader, loss_func, optimizer, device)

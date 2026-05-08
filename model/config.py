@@ -4,7 +4,8 @@ class Config:
     cpp_data_path =  "../data/cpp_tokens_with_lca_dist.parquet" 
     cpp_len = 48004
     vocab_path = "../data/final_vocab_combined.txt"
-    batch_size = 1
+    batch_size = 2
+    lr = 1e-4
     max_seq_len = 1001    # This is including [SOS] or [EOS] (depending on encoder or decoder)
     use_lca_distance = True    # False is Baseline Relative Bias approach
     val_ratio = 0.05

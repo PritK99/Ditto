@@ -2,6 +2,8 @@ import torch
 import pyarrow.parquet as pq
 from torch.utils.data import Dataset, DataLoader
 from utils import triu_to_full_matrix
+from tqdm import tqdm
+from config import Config
 
 class TranspilerDataset(Dataset):
     def __init__(self, c_data_path, cpp_data_path, vocab_path, max_seq_len, max_pos, use_lca_distance=False, mode="train", val_ratio=0.05, test_ratio=0.05, verbose=False):
@@ -84,6 +86,16 @@ class TranspilerDataset(Dataset):
         
         c_dist = torch.tensor(c_dist, dtype=torch.long)
         cpp_dist = torch.tensor(cpp_dist, dtype=torch.long)
+
+        # import math
+        # num_tokens_c = int((1 + math.isqrt(1 + 8*c_dist.shape[0])) // 2)    # This is formula for num_tokens from triu length
+        # num_tokens_cpp = int((1 + math.isqrt(1 + 8*cpp_dist.shape[0])) // 2)    # This is formula for num_tokens from triu length
+        # print(idx)
+        # print("len_c_tokens:", len(c_tokens), num_tokens_c)
+        # print("len_cpp_tokens:", len(cpp_tokens), num_tokens_cpp)
+        # print("c_dist_matrix:", c_dist.shape)
+        # print("cpp_dist_matrix:", cpp_dist.shape)
+        # print("//////////////////////////////////////////\n")
         
         def get_encoder_input(tokens, max_len):
             num_pad = max_len - len(tokens) - 1  # only [EOS] is appended to encoder input
@@ -138,8 +150,20 @@ def get_dataloaders(c_data_path, cpp_data_path, vocab_path, batch_size, max_seq_
     val_data = TranspilerDataset(c_data_path, cpp_data_path, vocab_path, max_seq_len, max_pos, use_lca_distance, mode="val", val_ratio=val_ratio, test_ratio=test_ratio)
     test_data = TranspilerDataset(c_data_path, cpp_data_path, vocab_path, max_seq_len, max_pos, use_lca_distance, mode="test", val_ratio=val_ratio, test_ratio=test_ratio)
 
-    train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True)
+    train_data.__getitem__(127)
+
+    train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=False)
     val_dataloader = DataLoader(val_data, batch_size=batch_size, shuffle=False)
     test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
     return train_dataloader, val_dataloader, test_dataloader
+
+if __name__ == "__main__":
+    config = Config()
+
+    train_dataloader, val_dataloader, test_dataloader = get_dataloaders(config.c_data_path, config.cpp_data_path, config.vocab_path, config.batch_size, config.max_seq_len, config.max_pos, config.use_lca_distance, config.val_ratio, config.test_ratio)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+
+    for c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask in tqdm(train_dataloader, desc="Training"):
+        c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask = c_encoder_token_ids.to(device), cpp_encoder_token_ids.to(device), c_encoder_mask.to(device), cpp_encoder_mask.to(device), c_encoder_dist_matrix.to(device), c_decoder_dist_matrix.to(device), cpp_encoder_dist_matrix.to(device), cpp_decoder_dist_matrix.to(device), c_decoder_token_ids.to(device), cpp_decoder_token_ids.to(device), c_decoder_mask.to(device), cpp_decoder_mask.to(device)
