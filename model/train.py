@@ -1,7 +1,9 @@
+import os
 import torch
 import torch.nn as nn
 from config import Config
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 from dataset import get_dataloaders
 from model import Ditto
 
@@ -29,7 +31,7 @@ def train_one_epoch(model, train_dataloader, val_dataloader, loss_func, optimize
     train_loss = 0
     for c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask in tqdm(train_dataloader, desc="Training"):
         # Moving everything to device
-        c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask = c_encoder_token_ids.to(device), cpp_encoder_token_ids.to(device), c_encoder_mask.to(device), cpp_encoder_mask.to(device), c_encoder_dist_matrix.to(device), c_decoder_dist_matrix.to(device), cpp_encoder_dist_matrix.to(device), cpp_decoder_dist_matrix.to(device), c_decoder_token_ids.to(device), cpp_decoder_token_ids.to(device), c_decoder_mask.to(device), cpp_decoder_mask.to(device)
+        # c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask = c_encoder_token_ids.to(device), cpp_encoder_token_ids.to(device), c_encoder_mask.to(device), cpp_encoder_mask.to(device), c_encoder_dist_matrix.to(device), c_decoder_dist_matrix.to(device), cpp_encoder_dist_matrix.to(device), cpp_decoder_dist_matrix.to(device), c_decoder_token_ids.to(device), cpp_decoder_token_ids.to(device), c_decoder_mask.to(device), cpp_decoder_mask.to(device)
 
         optimizer.zero_grad()
         c_out, cpp_out = model(c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask)
@@ -43,7 +45,7 @@ def train_one_epoch(model, train_dataloader, val_dataloader, loss_func, optimize
     with torch.no_grad():
         for c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask in tqdm(val_dataloader, desc="Validating"):
             # Moving everything to device
-            c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask = c_encoder_token_ids.to(device), cpp_encoder_token_ids.to(device), c_encoder_mask.to(device), cpp_encoder_mask.to(device), c_encoder_dist_matrix.to(device), c_decoder_dist_matrix.to(device), cpp_encoder_dist_matrix.to(device), cpp_decoder_dist_matrix.to(device), c_decoder_token_ids.to(device), cpp_decoder_token_ids.to(device), c_decoder_mask.to(device), cpp_decoder_mask.to(device)
+            # c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask = c_encoder_token_ids.to(device), cpp_encoder_token_ids.to(device), c_encoder_mask.to(device), cpp_encoder_mask.to(device), c_encoder_dist_matrix.to(device), c_decoder_dist_matrix.to(device), cpp_encoder_dist_matrix.to(device), cpp_decoder_dist_matrix.to(device), c_decoder_token_ids.to(device), cpp_decoder_token_ids.to(device), c_decoder_mask.to(device), cpp_decoder_mask.to(device)
 
             c_out, cpp_out = model(c_encoder_token_ids, cpp_encoder_token_ids, c_encoder_mask, cpp_encoder_mask, c_encoder_dist_matrix, c_decoder_dist_matrix, cpp_encoder_dist_matrix, cpp_decoder_dist_matrix, c_decoder_token_ids, cpp_decoder_token_ids, c_decoder_mask, cpp_decoder_mask)
             loss = loss_func(c_out, cpp_out, c_encoder_token_ids, cpp_encoder_token_ids)
@@ -64,7 +66,7 @@ def train(model, num_epochs, train_dataloader, val_dataloader, loss_func, optimi
         val_losses.append(val_loss)
         print(f"Completed epoch {epoch}: Training loss = {train_loss} and Validation loss = {val_loss}", flush = True)
     
-    return train_loss, val_loss
+    return train_losses, val_losses
 
 if __name__ == "__main__":
     config = Config()
